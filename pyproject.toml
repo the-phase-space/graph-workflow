@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "graph-workflow"
+# Version derives from lightweight git tags (MAJOR.MINOR.PATCH) via setuptools-scm;
+# git tags are the sole source of truth for version history.
+dynamic = ["version"]
+description = "Runtime library for composing and executing directed graphs of script, LLM, and human nodes."
+readme = "README.md"
+requires-python = ">=3.11"
+
+[tool.setuptools]
+packages = ["graph_workflow", "graph_workflow.providers"]
+
+[tool.setuptools_scm]

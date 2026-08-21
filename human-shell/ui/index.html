@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>graph-workflow — human input</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 18px 22px 90px;
+    background: #14161a; color: #e7e9ee;
+    font: 14px/1.5 "Segoe UI", system-ui, sans-serif;
+  }
+  h1 { font-size: 15px; margin: 0 0 2px; color: #9fb4d8; font-weight: 600; }
+  .meta { color: #6d7686; font-size: 12px; margin-bottom: 14px; }
+  section { margin-bottom: 16px; }
+  .label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+           color: #8a93a6; margin-bottom: 6px; }
+  .prompt, .inputs {
+    background: #1c1f26; border: 1px solid #2a2e38; border-radius: 8px;
+    padding: 12px 14px; white-space: pre-wrap; word-break: break-word;
+    max-height: 220px; overflow: auto;
+  }
+  .inputs { font-family: Consolas, monospace; font-size: 12.5px; color: #b9c2d4; }
+  .field { margin-bottom: 12px; }
+  .field .name { font-family: Consolas, monospace; color: #d8b46a; }
+  .field .type { color: #6d7686; font-size: 12px; margin-left: 6px; }
+  textarea {
+    width: 100%; min-height: 64px; margin-top: 5px; resize: vertical;
+    background: #101216; color: #e7e9ee; border: 1px solid #2a2e38;
+    border-radius: 6px; padding: 9px 11px; font: 13px Consolas, monospace;
+  }
+  textarea:focus { outline: none; border-color: #4a6da8; }
+  .bar {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    background: #181b21; border-top: 1px solid #2a2e38;
+    padding: 12px 22px; display: flex; justify-content: flex-end; gap: 10px;
+  }
+  button {
+    background: #3d6cb0; color: #fff; border: 0; border-radius: 6px;
+    padding: 9px 26px; font: 600 13.5px "Segoe UI", sans-serif; cursor: pointer;
+  }
+  button:hover { background: #4a7cc4; }
+  .empty { color: #6d7686; font-style: italic; }
+</style>
+</head>
+<body>
+  <h1 id="title">human input</h1>
+  <div class="meta" id="meta"></div>
+  <section>
+    <div class="label">Prompt</div>
+    <div class="prompt" id="prompt"></div>
+  </section>
+  <section id="inputs-section" hidden>
+    <div class="label">Inputs</div>
+    <div class="inputs" id="inputs"></div>
+  </section>
+  <section>
+    <div class="label">Your response</div>
+    <div id="fields"></div>
+  </section>
+  <div class="bar"><button id="submit">Submit</button></div>
+
+<script>
+const invoke = window.__TAURI__.core.invoke;
+
+let declared = {};
+
+async function init() {
+  const req = await invoke("get_request");
+  document.getElementById("title").textContent = `node ${req.node} — invocation ${req.invocation}`;
+  document.getElementById("meta").textContent = `run ${req.run_id}`;
+  document.getElementById("prompt").textContent = req.prompt || "(no prompt)";
+  const inputs = req.inputs || {};
+  if (Object.keys(inputs).length) {
+    document.getElementById("inputs-section").hidden = false;
+    document.getElementById("inputs").textContent = JSON.stringify(inputs, null, 2);
+  }
+  declared = req.outputs || {};
+  const fields = document.getElementById("fields");
+  const names = Object.keys(declared);
+  if (!names.length) {
+    fields.innerHTML = '<div class="empty">This node declares no outputs — submitting simply commits.</div>';
+  }
+  for (const name of names) {
+    const div = document.createElement("div");
+    div.className = "field";
+    const label = document.createElement("div");
+    const n = document.createElement("span"); n.className = "name"; n.textContent = name;
+    const t = document.createElement("span"); t.className = "type"; t.textContent = declared[name];
+    label.append(n, t);
+    const ta = document.createElement("textarea");
+    ta.dataset.name = name;
+    div.append(label, ta);
+    fields.append(div);
+  }
+}
+
+document.getElementById("submit").addEventListener("click", async () => {
+  const outputs = {};
+  for (const ta of document.querySelectorAll("textarea[data-name]")) {
+    const value = ta.value;
+    if (value !== "") outputs[ta.dataset.name] = value;
+  }
+  await invoke("submit", { outputs });
+});
+
+init();
+</script>
+</body>
+</html>

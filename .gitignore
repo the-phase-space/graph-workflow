@@ -1,2 +1,12 @@
 AGENTS.md
 .claude/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+runs/
+build/
+dist/
+human-shell/src-tauri/target/
+human-shell/src-tauri/gen/
+human-shell/bin/
