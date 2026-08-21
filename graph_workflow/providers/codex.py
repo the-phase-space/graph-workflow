@@ -45,9 +45,16 @@ class CodexAppServerInvocation:
     plan = None  # engine's marker for a live (kill()-able) invocation handle
 
     def __init__(self, adapter: "CodexAdapter", node, resume_session: str | None,
-                 prompt: str, cwd: str):
+                 prompt: str, cwd: str, tee_path: str | None = None):
         self.steered = False
         self.killed = False
+        # Live activity surface for the Monitor GUI (see LiveInvocation).
+        self._tee = None
+        if tee_path:
+            try:
+                self._tee = open(tee_path, "a", encoding="utf-8", buffering=1)
+            except OSError:
+                self._tee = None
         self._node = node
         self._resume_session = resume_session
         self._prompt = prompt
@@ -126,6 +133,11 @@ class CodexAppServerInvocation:
                 if not stripped:
                     continue
                 self._lines.append(stripped)
+                if self._tee is not None:
+                    try:
+                        self._tee.write(stripped + "\n")
+                    except Exception:
+                        self._tee = None
                 try:
                     msg = json.loads(stripped)
                 except json.JSONDecodeError:
@@ -153,6 +165,11 @@ class CodexAppServerInvocation:
                     self._turn_done.set()
         except Exception:
             pass
+        if self._tee is not None:
+            try:
+                self._tee.close()
+            except Exception:
+                pass
         # EOF: unblock every waiter.
         self._turn_started.set()
         self._turn_done.set()
@@ -277,8 +294,10 @@ class CodexAdapter(ProviderAdapter):
     uses_app_server = True
 
     def start_app_server(self, node, resume_session: str | None, prompt: str,
-                         cwd: str) -> CodexAppServerInvocation:
-        return CodexAppServerInvocation(self, node, resume_session, prompt, cwd)
+                         cwd: str, tee_path: str | None = None
+                         ) -> CodexAppServerInvocation:
+        return CodexAppServerInvocation(self, node, resume_session, prompt, cwd,
+                                        tee_path=tee_path)
 
     # -- legacy ``codex exec`` fallback (GW_CODEX_EXEC=1) ------------------ #
 

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "graph-workflow-monitor",
+  "version": "0.0.0",
+  "identifier": "space.phase.graph-workflow.monitor",
+  "build": {
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "graph-workflow — Monitor",
+        "width": 1440,
+        "height": 920,
+        "minWidth": 960,
+        "minHeight": 620,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false,
+    "icon": ["icons/icon.ico"]
+  }
+}

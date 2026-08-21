@@ -10,3 +10,7 @@ dist/
 human-shell/src-tauri/target/
 human-shell/src-tauri/gen/
 human-shell/bin/
+monitor/node_modules/
+monitor/src-tauri/target/
+monitor/src-tauri/gen/
+monitor/bin/

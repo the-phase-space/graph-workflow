@@ -12,6 +12,7 @@ when no node is ready and no node is running.
 from __future__ import annotations
 
 import copy
+import os
 import queue
 import threading
 import time
@@ -105,6 +106,14 @@ class Runtime:
             warnings = validate(graph, self.namespace)
         else:
             warnings = []
+        if seed is None and os.environ.get("GW_SEED"):
+            # GUI interchange: the Monitor sets GW_SEED/GW_RUN_DIR when it
+            # executes a definition, so defs that don't plumb them explicitly
+            # remain controllable. Explicit arguments always win.
+            try:
+                seed = int(os.environ["GW_SEED"])
+            except ValueError:
+                pass
         if seed is None:
             import secrets
 
@@ -117,6 +126,8 @@ class Runtime:
         else:
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             self.run_id = f"{_slug(graph.name)}-{stamp}-s{self.seed % 100000}"
+        if run_dir is None:
+            run_dir = os.environ.get("GW_RUN_DIR") or None
         if run_dir is None:
             base = Path(self.namespace.get("__file__", ".")).resolve().parent
             run_dir = base / "runs" / self.run_id
@@ -197,6 +208,7 @@ class Runtime:
                 seed=self.seed,
                 graph=self.graph.to_json(),
             )
+        self._launch_monitor_gui()
         for w in self._startup_warnings:
             self._warn(w)
 
@@ -249,6 +261,55 @@ class Runtime:
             reason=self._stop_reason or "quiescent",
             states=self.states,
         )
+
+    def _launch_monitor_gui(self):
+        """Executing a graph definition automatically launches or attaches
+        the Monitor GUI for that run (the GUI is single-instance, so a second
+        launch forwards the run dir to the running window — both entry paths
+        converge on one shared session). GW_MONITOR controls it: '0'/'off'
+        never launches; '1' launches the default exe; a path launches that
+        exe; unset launches the default exe only when it exists and stderr is
+        an interactive console (so test harnesses and pipelines stay
+        headless). The GUI itself sets GW_MONITOR=0 on runs it spawns."""
+        import subprocess
+        import sys as _sys
+
+        setting = os.environ.get("GW_MONITOR", "").strip()
+        if setting.lower() in ("0", "off", "no", "none", "false"):
+            return
+        if setting and setting.lower() not in ("1", "on", "yes", "true"):
+            exe = Path(setting)
+        else:
+            exe_name = (
+                "graph-workflow-monitor.exe" if os.name == "nt" else "graph-workflow-monitor"
+            )
+            exe = Path(__file__).resolve().parent.parent / "monitor" / "bin" / exe_name
+            if not setting:
+                try:
+                    if not _sys.stderr.isatty():
+                        return
+                except Exception:
+                    return
+        if not exe.exists():
+            return
+        try:
+            kwargs = {}
+            if os.name == "nt":
+                # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP: the GUI must
+                # outlive and never block or be signalled with this run.
+                kwargs["creationflags"] = 0x00000008 | 0x00000200
+            else:
+                kwargs["start_new_session"] = True
+            subprocess.Popen(
+                [str(exe), "--run-dir", str(self.run_dir)],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=True,
+                **kwargs,
+            )
+        except Exception:
+            pass  # the run must never fail over its monitor
 
     # ------------------------------------------------------------------ #
     # Event plumbing

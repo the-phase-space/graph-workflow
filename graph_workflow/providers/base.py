@@ -107,7 +107,8 @@ class LiveInvocation:
     """A running CLI invocation: incremental output capture, optional live
     steering via held-open stdin, and tree-kill for Stop/timeout/fallback."""
 
-    def __init__(self, plan: InvocationPlan, env: dict[str, str], cwd: str | None):
+    def __init__(self, plan: InvocationPlan, env: dict[str, str], cwd: str | None,
+                 tee_path: str | None = None):
         self.plan = plan
         self.steered = False
         self.killed = False
@@ -115,6 +116,15 @@ class LiveInvocation:
         self._stderr: list[str] = []
         self._turn_ended = threading.Event()
         self._stdin_lock = threading.Lock()
+        # Live activity surface for the Monitor GUI: provider stdout (the
+        # session's event stream) is teed line-by-line to a file as it
+        # arrives, so an external process can tail the session in real time.
+        self._tee = None
+        if tee_path:
+            try:
+                self._tee = open(tee_path, "a", encoding="utf-8", buffering=1)
+            except OSError:
+                self._tee = None
         wants_stdin = plan.stdin_initial is not None or plan.hold_stdin
         self.proc = subprocess.Popen(
             plan.argv,
@@ -145,11 +155,21 @@ class LiveInvocation:
         try:
             for line in self.proc.stdout:
                 self._stdout.append(line)
+                if self._tee is not None:
+                    try:
+                        self._tee.write(line)
+                    except Exception:
+                        self._tee = None
                 if self.plan.turn_end is not None and self.plan.turn_end(line):
                     self._turn_ended.set()
         except Exception:
             pass
         self._turn_ended.set()  # EOF ends the interaction too
+        if self._tee is not None:
+            try:
+                self._tee.close()
+            except Exception:
+                pass
 
     def _read_stderr(self):
         try:

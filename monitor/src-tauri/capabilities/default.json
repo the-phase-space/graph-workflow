@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Monitor main window capabilities",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-title",
+    "dialog:default"
+  ]
+}

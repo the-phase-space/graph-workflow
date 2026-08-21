@@ -43,9 +43,21 @@ class Monitor:
         snapshot = dict(snapshot)
         snapshot["ts"] = round(time.time(), 3)
         tmp = self.status_path.with_suffix(".json.tmp")
-        with open(tmp, "w", encoding="utf-8") as fh:
-            json.dump(snapshot, fh, ensure_ascii=False, indent=1)
-        os.replace(tmp, self.status_path)
+        try:
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump(snapshot, fh, ensure_ascii=False, indent=1)
+            for _ in range(3):
+                try:
+                    os.replace(tmp, self.status_path)
+                    return
+                except PermissionError:
+                    # On Windows, sync clients and scanners briefly hold
+                    # status.json open, denying the replace. The trace is
+                    # authoritative; a skipped snapshot is harmless — the
+                    # next event rewrites it.
+                    time.sleep(0.03)
+        except OSError:
+            pass
 
     @staticmethod
     def _format(r: dict) -> str | None:
