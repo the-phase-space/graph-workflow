@@ -4,6 +4,7 @@
 // Python is the authoritative backend on both sides of that line.
 
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm as confirmDialog, open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -27,6 +28,7 @@ import {
   envInfo,
   isBackendError,
   joinPath,
+  listDir,
   loadGraph,
   saveGraph,
   spawnRun,
@@ -65,6 +67,7 @@ export default function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [tempRuns, setTempRuns] = useState<string | null>(null);
+  const [dropHover, setDropHover] = useState(false);
 
   const run = useRunState(runDir);
   const mode: "welcome" | "build" | "exec" = runDir ? "exec" : contract ? "build" : "welcome";
@@ -133,6 +136,37 @@ export default function App() {
       void un.then((f) => f());
     };
   }, [openPath]);
+
+  // Native file drag-drop: a .py loads as a graph definition; a directory
+  // containing a trace attaches as a run.
+  useEffect(() => {
+    const un = getCurrentWebviewWindow().onDragDropEvent(async (event) => {
+      const t = event.payload.type;
+      if (t === "enter" || t === "over") setDropHover(true);
+      else if (t === "leave") setDropHover(false);
+      else if (t === "drop") {
+        setDropHover(false);
+        const paths = event.payload.paths ?? [];
+        const py = paths.find((p) => p.toLowerCase().endsWith(".py"));
+        if (py) {
+          void openPath(py);
+          return;
+        }
+        for (const p of paths) {
+          const entries = await listDir(p).catch(() => []);
+          if (entries.some((e) => e.name === "trace.jsonl" || e.name === "status.json")) {
+            setSelection(null);
+            setRunDir(p);
+            return;
+          }
+        }
+        if (paths.length) report("Drop a graph definition (.py) or a run directory.");
+      }
+    });
+    return () => {
+      void un.then((f) => f());
+    };
+  }, [openPath, report]);
 
   // -- window title: the graph name lives here, not in a top bar ---------- //
 
@@ -436,6 +470,9 @@ export default function App() {
           />
         )}
 
+        {dropHover && (
+          <div className="drop-overlay">Drop graph definition (.py) or run directory</div>
+        )}
         {busy && <div className="toast busy">{busy}</div>}
         {notice && (
           <div className="toast notice" onClick={() => setNotice(null)}>
