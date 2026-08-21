@@ -71,11 +71,11 @@ tolerance), `status.json` (live snapshot for the monitor GUI), `prompts/`,
 `human/`. Control a live run programmatically (`Runtime.pause/resume/stop`)
 or externally by writing `{"command": "pause"}` to `control.json` in the run
 directory. `Pause` delivers the halt message to every running LLM session —
-steered live into the session where the provider exposes a channel (claude,
-via stream-json stdin: the message reaches the agent after its current tool
-call, no interrupt), with an interrupt + session-bound-resume fallback where
-none exists (codex exec, headless grok) — and the session terminates once
-the model ends its following turn. `Resume` re-enters each session with
+steered live into the session where the provider exposes a channel (claude
+via stream-json stdin, codex via the app-server `turn/steer` method: the
+message reaches the agent after its current tool call, no interrupt), with
+an interrupt + session-bound-resume fallback where none exists (headless
+grok) — and the session terminates once the model ends its following turn. `Resume` re-enters each session with
 `continue`, and that reply completes the open invocation (both messages
 overridable per graph and per node). `resume_run(graph, trace_path)` resumes
 a crashed or paused run from disk.

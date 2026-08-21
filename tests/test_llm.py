@@ -61,10 +61,15 @@ def _wait(predicate, timeout, interval=0.25):
     return False
 
 
-def test_llm_pause_resume(run_dir):
-    """Pause mid-turn: the runtime interrupts the running claude session,
-    sends the halt message via the session-bound resume form, reaches
-    `paused`; Resume sends `continue` and the reply completes invocation 1."""
+@pytest.mark.parametrize(
+    "fname", ["t14_llm_pause.py", "t15_llm_pause_codex.py"]
+)
+def test_llm_pause_resume(fname, run_dir):
+    """Pause mid-turn: the runtime steers the halt message into the live
+    session (claude via stream-json stdin, codex via app-server turn/steer),
+    the model ends its following turn (the ack) and the run reaches
+    `paused`; Resume re-enters the session with `continue` and the reply
+    completes invocation 1."""
     import os
 
     env = dict(os.environ)
@@ -72,7 +77,7 @@ def test_llm_pause_resume(run_dir):
     env["GW_SEED"] = "7"
     env["GW_RUN_DIR"] = str(run_dir)
     proc = subprocess.Popen(
-        [sys.executable, str(GRAPHS / "t14_llm_pause.py")],
+        [sys.executable, str(GRAPHS / fname)],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, encoding="utf-8", errors="replace",
         env=env, cwd=str(run_dir),
@@ -96,6 +101,11 @@ def test_llm_pause_resume(run_dir):
             proc.kill()
     events = load_trace(run_dir)
     assert evs(events, "resumed")
+    interrupted = evs(events, "node_interrupted", "L")
+    assert interrupted and interrupted[0].get("steered") is True, (
+        f"halt was not steered into the live session: {interrupted}"
+    )
+    assert evs(events, "node_pause_acked"), "no pause ack recorded"
     lc = commits(events, "L")
     assert lc, "LLM node never committed after resume"
     assert lc[0]["invocation"] == 1, "resume must complete the open invocation"

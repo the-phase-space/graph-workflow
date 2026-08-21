@@ -217,12 +217,15 @@ def _invoke_llm(node: LLMNode, prompt: str, *, resume_session: str | None,
     adapter = get_adapter(node.provider)
     cwd = node.cwd or os.getcwd()
     prompt_path = str(_write_prompt_file(run_dir, node.id, invocation, tag, prompt))
-    pfile = prompt_path if adapter.needs_prompt_file else None
-    if resume_session:
-        plan = adapter.plan_resume(node, resume_session, cwd, prompt, pfile)
+    if getattr(adapter, "uses_app_server", False) and not os.environ.get("GW_CODEX_EXEC"):
+        handle = adapter.start_app_server(node, resume_session, prompt, cwd)
     else:
-        plan = adapter.plan_new(node, session_id, cwd, prompt, pfile)
-    handle = LiveInvocation(plan, adapter.build_env(), cwd)
+        pfile = prompt_path if adapter.needs_prompt_file else None
+        if resume_session:
+            plan = adapter.plan_resume(node, resume_session, cwd, prompt, pfile)
+        else:
+            plan = adapter.plan_new(node, session_id, cwd, prompt, pfile)
+        handle = LiveInvocation(plan, adapter.build_env(), cwd)
     if register_proc is not None:
         register_proc(handle)
     try:
