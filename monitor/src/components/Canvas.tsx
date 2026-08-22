@@ -71,16 +71,29 @@ interface View {
   scale: number;
 }
 
+// Node kinds offered by the right-click "New node" submenu; mirrors the
+// Compose section of the sidebar.
+const NODE_KINDS: Array<{ kind: string; label: string }> = [
+  { kind: "script", label: "Script" },
+  { kind: "human", label: "Human" },
+  { kind: "claude", label: "Claude" },
+  { kind: "codex", label: "Codex" },
+  { kind: "grok", label: "Grok" },
+];
+
 export default function Canvas(props: {
   model: GraphModel;
   run: RunState | null;
   selection: Selection | null;
   onSelect: (s: Selection | null) => void;
+  onAddNode?: (kind: string) => void;
+  onAddEdge?: () => void;
 }) {
-  const { model, run, selection, onSelect } = props;
+  const { model, run, selection, onSelect, onAddNode, onAddEdge } = props;
   const holder = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [view, setView] = useState<View>({ tx: 0, ty: 0, scale: 1 });
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const drag = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
   const fittedFor = useRef<string>("");
 
@@ -144,10 +157,45 @@ export default function Canvas(props: {
 
   const moved = useRef(false);
   const onMouseDown = (e: React.MouseEvent) => {
+    setCtxMenu(null);
     if (e.button !== 0) return;
     moved.current = false;
     drag.current = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty };
   };
+
+  // Right-clicking empty canvas offers element creation in build mode; the
+  // webview's own context menu is suppressed everywhere on the canvas.
+  const onContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!onAddNode) return;
+    const rect = holder.current?.getBoundingClientRect();
+    if (!rect) return;
+    // Keep the menu (and room for its hover submenu) inside the canvas.
+    const x = Math.min(e.clientX - rect.left, Math.max(0, rect.width - 290));
+    const y = Math.min(e.clientY - rect.top, Math.max(0, rect.height - 100));
+    setCtxMenu({ x, y });
+  };
+
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const dismiss = () => setCtxMenu(null);
+    const onDown = (e: MouseEvent) => {
+      if (e.target instanceof Node && menuRef.current?.contains(e.target)) return;
+      dismiss();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") dismiss();
+    };
+    window.addEventListener("mousedown", onDown, true);
+    window.addEventListener("blur", dismiss);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown, true);
+      window.removeEventListener("blur", dismiss);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [ctxMenu]);
   useEffect(() => {
     const move = (e: MouseEvent) => {
       const d = drag.current;
@@ -170,8 +218,12 @@ export default function Canvas(props: {
     <div
       ref={holder}
       className="canvas-holder"
-      onWheel={onWheel}
+      onWheel={(e) => {
+        setCtxMenu(null);
+        onWheel(e);
+      }}
       onMouseDown={onMouseDown}
+      onContextMenu={onContextMenu}
       onClick={() => {
         // Clicking empty canvas minimizes the inspector; a pan drag that ends
         // over the canvas still emits a click, so suppress those.
@@ -217,6 +269,10 @@ export default function Canvas(props: {
                 className="node"
                 filter={glow ? `url(#glow-${vs})` : undefined}
                 onMouseDown={(e) => e.stopPropagation()}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelect({ kind: "node", id: n.id });
@@ -275,6 +331,47 @@ export default function Canvas(props: {
       >
         ⛶
       </button>
+      {ctxMenu && onAddNode && (
+        <div
+          ref={menuRef}
+          className="ctx-menu"
+          style={{ left: ctxMenu.x, top: ctxMenu.y }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onWheel={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <div className="ctx-item has-sub">
+            <span>New node</span>
+            <span className="ctx-caret">▸</span>
+            <div className="ctx-sub">
+              {NODE_KINDS.map(({ kind, label }) => (
+                <button
+                  key={kind}
+                  className="ctx-item"
+                  onClick={() => {
+                    setCtxMenu(null);
+                    onAddNode(kind);
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {onAddEdge && (
+            <button
+              className="ctx-item"
+              onClick={() => {
+                setCtxMenu(null);
+                onAddEdge();
+              }}
+            >
+              New edge
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -291,6 +388,10 @@ function GeneratorGlyph(props: {
     <g
       className="node"
       onMouseDown={(e) => e.stopPropagation()}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
       onClick={(e) => {
         e.stopPropagation();
         props.onSelect();
@@ -323,6 +424,10 @@ function EdgePaths(props: {
     <g
       className="edge"
       onMouseDown={(e) => e.stopPropagation()}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
       onClick={(e) => {
         e.stopPropagation();
         onSelect();

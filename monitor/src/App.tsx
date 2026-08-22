@@ -362,6 +362,29 @@ export default function App() {
     [contract, dirty, doSave, report, tempRuns],
   );
 
+  const doAddNode = useCallback(
+    (kind: string) =>
+      mutate((c) => {
+        const node =
+          kind === "script" || kind === "human"
+            ? makeNode(c.graph, kind)
+            : makeNode(c.graph, "llm", kind);
+        setSelection({ kind: "node", id: node.id });
+        return { ...c, graph: addNode(c.graph, node) };
+      }),
+    [mutate],
+  );
+
+  const doAddEdge = useCallback(
+    () =>
+      mutate((c) => {
+        const edge = makeEdge(c.graph);
+        setSelection({ kind: "edge", id: edge.id });
+        return { ...c, graph: addEdge(c.graph, edge) };
+      }),
+    [mutate],
+  );
+
   const doAttach = useCallback(async () => {
     const picked = await openDialog({ directory: true, multiple: false });
     if (typeof picked === "string") {
@@ -465,23 +488,8 @@ export default function App() {
         onValidate={() => void doValidate()}
         onRun={(s) => void doRun(s)}
         onAttach={() => void doAttach()}
-        onAddNode={(kind) =>
-          mutate((c) => {
-            const node =
-              kind === "script" || kind === "human"
-                ? makeNode(c.graph, kind)
-                : makeNode(c.graph, "llm", kind);
-            setSelection({ kind: "node", id: node.id });
-            return { ...c, graph: addNode(c.graph, node) };
-          })
-        }
-        onAddEdge={() =>
-          mutate((c) => {
-            const edge = makeEdge(c.graph);
-            setSelection({ kind: "edge", id: edge.id });
-            return { ...c, graph: addEdge(c.graph, edge) };
-          })
-        }
+        onAddNode={doAddNode}
+        onAddEdge={doAddEdge}
         onSelect={setSelection}
         onPause={() => runDir && void controlRun(runDir, "pause")}
         onResume={() => runDir && void controlRun(runDir, "resume")}
@@ -501,6 +509,8 @@ export default function App() {
             run={mode === "exec" ? run : null}
             selection={selection}
             onSelect={setSelection}
+            onAddNode={editable ? doAddNode : undefined}
+            onAddEdge={editable ? doAddEdge : undefined}
           />
         ) : mode === "exec" ? (
           <div className="welcome">

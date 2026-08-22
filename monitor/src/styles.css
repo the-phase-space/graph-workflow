@@ -402,6 +402,65 @@ kbd {
   box-shadow: var(--shadow);
 }
 
+/* Right-click context menu on empty canvas (build mode). */
+
+.ctx-menu {
+  position: absolute;
+  z-index: 30;
+  min-width: 148px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  cursor: default;
+  user-select: none;
+}
+
+.ctx-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 13px;
+  text-align: left;
+  color: var(--text);
+  background: none;
+  border: none;
+  border-radius: 5px;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.ctx-item:hover {
+  background: var(--panel-2);
+}
+
+.ctx-caret {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ctx-sub {
+  display: none;
+  position: absolute;
+  left: calc(100% - 2px);
+  top: -5px;
+  min-width: 120px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.ctx-item.has-sub:hover > .ctx-sub {
+  display: block;
+}
+
 .node {
   cursor: pointer;
 }
