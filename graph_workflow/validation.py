@@ -12,14 +12,37 @@ trace.
 
 from __future__ import annotations
 
+import ast
+import builtins
+
 from .errors import GraphValidationError
 from .model import GENERATOR_ID, RESERVED_METRICS, Graph, LLMNode, HumanNode
 from .providers import known_providers
 
 
+def _free_names(expr: str) -> set[str]:
+    """Names an expression reads that it does not itself bind (comprehension
+    targets and walrus bindings are excluded). Unparseable expressions return
+    the empty set — the syntax error surfaces separately."""
+    try:
+        tree = ast.parse(expr, mode="eval")
+    except SyntaxError:
+        return set()
+    loads = {
+        n.id for n in ast.walk(tree)
+        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
+    }
+    bound = {
+        n.id for n in ast.walk(tree)
+        if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load)
+    }
+    return loads - bound
+
+
 def validate(graph: Graph, namespace: dict | None = None) -> list[str]:
     errors: list[str] = []
     warnings: list[str] = []
+    ns_provided = namespace is not None
     namespace = namespace or {}
 
     node_ids = set(graph.nodes)
@@ -114,6 +137,44 @@ def validate(graph: Graph, namespace: dict | None = None) -> list[str]:
                 errors.append(
                     f"gate {gate.gate_id}: p_invocation must be in [0, 1], "
                     f"got {gate.p_invocation}"
+                )
+
+    # -- expression name resolution ------------------------------------------ #
+    # Expressions evaluate in the definition module's own namespace plus the
+    # runtime bindings; a name resolvable in neither evaluates to a NameError
+    # (treated as False) at run time. Only meaningful when the caller supplied
+    # the definition namespace.
+    if ns_provided:
+        known = (
+            set(namespace)
+            | node_ids
+            | set(graph.edges)
+            | {GENERATOR_ID, "isDefined", "UNDEFINED"}
+            | set(vars(builtins))
+        )
+
+        def check_names(expr: str | None, where: str, extra: tuple | dict = ()):
+            if not expr:
+                return
+            for name in sorted(_free_names(expr) - known - set(extra)):
+                warnings.append(
+                    f"{where} references {name!r}, which is not a node, edge, "
+                    "helper, or builtin — it will fail at evaluation time"
+                )
+
+        for node in graph.nodes.values():
+            check_names(node.gate, f"node {node.id} gating expression")
+            check_names(
+                node.output_expression,
+                f"node {node.id} output expression",
+                extra=node.outputs,
+            )
+        for edge in graph.edges.values():
+            for gate in edge.all_gates():
+                check_names(
+                    gate.expression,
+                    f"gate {gate.gate_id}",
+                    extra=("sampled_value", "p_invocation"),
                 )
 
     # -- typed node requirements -------------------------------------------- #

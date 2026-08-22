@@ -9,7 +9,7 @@ import {
   type GateSpec,
   type GraphModel,
 } from "../types";
-import { AreaField, Field, KV, TextField } from "./fields";
+import { AreaField, CollapseButton, Field, KV, TextField } from "./fields";
 
 function GateEditor(props: {
   label: string;
@@ -76,9 +76,7 @@ export function EdgeDialog(props: {
         <span className="dialog-sub">
           edge · {edge.inputs.length} → {edge.outputs.length}
         </span>
-        <button className="icon-btn" onClick={props.onClose} title="Close">
-          ×
-        </button>
+        <CollapseButton onClick={props.onClose} />
       </div>
       <div className="dialog-body">
         <div className="subsection">
@@ -166,9 +164,8 @@ export function GeneratorDialog(props: { fired: boolean; onClose: () => void }) 
     <div className="dialog">
       <div className="dialog-head">
         <span className="dialog-title mono">Generator</span>
-        <button className="icon-btn" onClick={props.onClose} title="Close">
-          ×
-        </button>
+        <span className="dialog-sub" />
+        <CollapseButton onClick={props.onClose} />
       </div>
       <div className="dialog-body">
         <div className="subsection">
@@ -203,9 +200,8 @@ export function GraphDialog(props: {
     <div className="dialog">
       <div className="dialog-head">
         <span className="dialog-title">Graph settings</span>
-        <button className="icon-btn" onClick={props.onClose} title="Close">
-          ×
-        </button>
+        <span className="dialog-sub" />
+        <CollapseButton onClick={props.onClose} />
       </div>
       <div className="dialog-body">
         <div className="subsection">

@@ -175,10 +175,30 @@ export interface Selection {
   id: string;
 }
 
-export const PROVIDER_MODELS: Record<string, string[]> = {
-  claude: ["fable", "opus", "sonnet", "haiku"],
-  codex: ["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"],
-  grok: ["grok-4.5", "grok-4.6"],
+export interface ModelOption {
+  alias: string;
+  id: string;
+}
+
+/** Friendly aliases shown in the Model dropdown. The graph definition and the
+ * provider CLI flag always carry the model id, never the display alias. Ids
+ * follow Development\Provider CLI Invocation Reference.md. */
+export const PROVIDER_MODELS: Record<string, ModelOption[]> = {
+  claude: [
+    { alias: "Fable", id: "fable" },
+    { alias: "Opus", id: "opus" },
+    { alias: "Sonnet", id: "sonnet" },
+    { alias: "Haiku", id: "haiku" },
+  ],
+  codex: [
+    { alias: "Luna", id: "gpt-5.6-luna" },
+    { alias: "Terra", id: "gpt-5.6-terra" },
+    { alias: "Sol", id: "gpt-5.6-sol" },
+  ],
+  grok: [
+    { alias: "Grok 4.5", id: "grok-4.5" },
+    { alias: "Grok 4.6", id: "grok-4.6" },
+  ],
 };
 
 export const EFFORTS = ["low", "medium", "high", "xhigh", "max"];

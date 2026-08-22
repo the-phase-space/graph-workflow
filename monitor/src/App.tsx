@@ -7,7 +7,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm as confirmDialog, open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Canvas from "./components/Canvas";
 import { EdgeDialog, GeneratorDialog, GraphDialog } from "./components/EdgeDialog";
 import NodeDialog from "./components/NodeDialog";
@@ -71,6 +71,50 @@ export default function App() {
 
   const run = useRunState(runDir);
   const mode: "welcome" | "build" | "exec" = runDir ? "exec" : contract ? "build" : "welcome";
+
+  // -- inspector panel geometry ------------------------------------------- //
+  // A docked right sidebar hosting the element dialogs: 33% of the workspace
+  // by default, freely resizable via its left-edge handle, width persisted.
+
+  const appRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLDivElement>(null);
+  const [inspectorWidth, setInspectorWidth] = useState<number>(() => {
+    const stored = Number(localStorage.getItem("gw-inspector-width"));
+    return Number.isFinite(stored) && stored >= 280 ? stored : 0;
+  });
+  const inspectorWidthRef = useRef(inspectorWidth);
+  const resizing = useRef(false);
+
+  const startInspectorResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    resizing.current = true;
+    document.body.classList.add("col-resizing");
+  };
+
+  useEffect(() => {
+    const move = (e: MouseEvent) => {
+      if (!resizing.current || !appRef.current) return;
+      const rect = appRef.current.getBoundingClientRect();
+      const w = Math.min(
+        Math.max(280, Math.round(rect.right - e.clientX)),
+        Math.max(320, rect.width - 300),
+      );
+      inspectorWidthRef.current = w;
+      setInspectorWidth(w);
+    };
+    const up = () => {
+      if (!resizing.current) return;
+      resizing.current = false;
+      document.body.classList.remove("col-resizing");
+      localStorage.setItem("gw-inspector-width", String(inspectorWidthRef.current));
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    return () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -254,7 +298,7 @@ export default function App() {
     if (!contract.path) return doSaveAs();
     if (!contract.structured) {
       const ok = await confirmDialog(
-        "This definition was not written by the Monitor: saving regenerates it in the structured format and may discard handwritten Python outside the contract. Overwrite?",
+        "This definition was not written by the Monitor: saving converts it to the structured format. Module-level helper code is preserved in the helpers section; the graph construction itself is regenerated. Overwrite?",
         { title: "Overwrite handwritten definition?", kind: "warning" },
       );
       if (!ok) return null;
@@ -342,8 +386,70 @@ export default function App() {
     return model.edges.find((e) => e.id === selection.id) ?? null;
   }, [model, selection]);
 
+  const inspectorContent =
+    selectedNode && model ? (
+      <NodeDialog
+        node={selectedNode}
+        run={mode === "exec" ? run : null}
+        editable={editable}
+        onChange={(n) =>
+          mutate((c) => {
+            if (n.id !== selectedNode.id) setSelection({ kind: "node", id: n.id });
+            return { ...c, graph: replaceNode(c.graph, selectedNode.id, n) };
+          })
+        }
+        onDelete={() => {
+          setSelection(null);
+          mutate((c) => ({ ...c, graph: deleteNode(c.graph, selectedNode.id) }));
+        }}
+        onClose={() => setSelection(null)}
+      />
+    ) : selectedEdge && model ? (
+      <EdgeDialog
+        edge={selectedEdge}
+        model={model}
+        editable={editable}
+        onChange={(e) =>
+          mutate((c) => {
+            if (e.id !== selectedEdge.id) setSelection({ kind: "edge", id: e.id });
+            return { ...c, graph: replaceEdge(c.graph, selectedEdge.id, e) };
+          })
+        }
+        onDelete={() => {
+          setSelection(null);
+          mutate((c) => ({ ...c, graph: deleteEdge(c.graph, selectedEdge.id) }));
+        }}
+        onClose={() => setSelection(null)}
+      />
+    ) : selection?.kind === "generator" ? (
+      <GeneratorDialog
+        fired={mode === "exec" && run.derived.runStartTs != null}
+        onClose={() => setSelection(null)}
+      />
+    ) : selection?.kind === "graph" && model ? (
+      <GraphDialog
+        model={model}
+        helpers={helpers}
+        editable={editable}
+        onChange={(m) => mutate((c) => ({ ...c, graph: m }))}
+        onHelpers={(h) => mutate((c) => ({ ...c, helpers: h }))}
+        onClose={() => setSelection(null)}
+      />
+    ) : null;
+
+  // Default the panel to 33% of the workspace the first time it opens
+  // (before paint, so no flash at the fallback width).
+  const inspectorOpen = inspectorContent != null;
+  useLayoutEffect(() => {
+    if (inspectorOpen && inspectorWidth === 0 && mainRef.current) {
+      const w = Math.round(mainRef.current.clientWidth * 0.33);
+      inspectorWidthRef.current = w;
+      setInspectorWidth(w);
+    }
+  }, [inspectorOpen, inspectorWidth]);
+
   return (
-    <div className="app">
+    <div className="app" ref={appRef}>
       <Sidebar
         mode={mode === "exec" ? "exec" : "build"}
         model={model}
@@ -388,7 +494,7 @@ export default function App() {
         onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
       />
 
-      <div className="main">
+      <div className="main" ref={mainRef}>
         {model ? (
           <Canvas
             model={model}
@@ -417,59 +523,6 @@ export default function App() {
           </div>
         )}
 
-        {selectedNode && model && (
-          <NodeDialog
-            node={selectedNode}
-            run={mode === "exec" ? run : null}
-            editable={editable}
-            onChange={(n) =>
-              mutate((c) => {
-                if (n.id !== selectedNode.id) setSelection({ kind: "node", id: n.id });
-                return { ...c, graph: replaceNode(c.graph, selectedNode.id, n) };
-              })
-            }
-            onDelete={() => {
-              setSelection(null);
-              mutate((c) => ({ ...c, graph: deleteNode(c.graph, selectedNode.id) }));
-            }}
-            onClose={() => setSelection(null)}
-          />
-        )}
-        {selectedEdge && model && (
-          <EdgeDialog
-            edge={selectedEdge}
-            model={model}
-            editable={editable}
-            onChange={(e) =>
-              mutate((c) => {
-                if (e.id !== selectedEdge.id) setSelection({ kind: "edge", id: e.id });
-                return { ...c, graph: replaceEdge(c.graph, selectedEdge.id, e) };
-              })
-            }
-            onDelete={() => {
-              setSelection(null);
-              mutate((c) => ({ ...c, graph: deleteEdge(c.graph, selectedEdge.id) }));
-            }}
-            onClose={() => setSelection(null)}
-          />
-        )}
-        {selection?.kind === "generator" && (
-          <GeneratorDialog
-            fired={mode === "exec" && run.derived.runStartTs != null}
-            onClose={() => setSelection(null)}
-          />
-        )}
-        {selection?.kind === "graph" && model && (
-          <GraphDialog
-            model={model}
-            helpers={helpers}
-            editable={editable}
-            onChange={(m) => mutate((c) => ({ ...c, graph: m }))}
-            onHelpers={(h) => mutate((c) => ({ ...c, helpers: h }))}
-            onClose={() => setSelection(null)}
-          />
-        )}
-
         {dropHover && (
           <div className="drop-overlay">Drop graph definition (.py) or run directory</div>
         )}
@@ -480,6 +533,20 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {inspectorContent && (
+        <aside
+          className="inspector"
+          style={{ width: inspectorWidth ? inspectorWidth : "33%" }}
+        >
+          <div
+            className="inspector-handle"
+            title="Drag to resize"
+            onMouseDown={startInspectorResize}
+          />
+          {inspectorContent}
+        </aside>
+      )}
     </div>
   );
 }

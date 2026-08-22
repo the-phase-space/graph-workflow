@@ -142,14 +142,17 @@ export default function Canvas(props: {
     });
   };
 
+  const moved = useRef(false);
   const onMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
+    moved.current = false;
     drag.current = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty };
   };
   useEffect(() => {
     const move = (e: MouseEvent) => {
       const d = drag.current;
       if (!d) return;
+      if (Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) > 3) moved.current = true;
       setView((v) => ({ ...v, tx: d.tx + (e.clientX - d.x), ty: d.ty + (e.clientY - d.y) }));
     };
     const up = () => (drag.current = null);
@@ -169,6 +172,15 @@ export default function Canvas(props: {
       className="canvas-holder"
       onWheel={onWheel}
       onMouseDown={onMouseDown}
+      onClick={() => {
+        // Clicking empty canvas minimizes the inspector; a pan drag that ends
+        // over the canvas still emits a click, so suppress those.
+        if (moved.current) {
+          moved.current = false;
+          return;
+        }
+        onSelect(null);
+      }}
     >
       <svg width={size.w} height={size.h} className="canvas-svg">
         <defs>
@@ -253,7 +265,14 @@ export default function Canvas(props: {
           />
         </g>
       </svg>
-      <button className="fit-btn" title="Fit to view" onClick={fit}>
+      <button
+        className="fit-btn"
+        title="Fit to view"
+        onClick={(e) => {
+          e.stopPropagation();
+          fit();
+        }}
+      >
         ⛶
       </button>
     </div>

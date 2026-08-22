@@ -13,7 +13,15 @@ import {
   type ActivityItem,
   type NodeSpec,
 } from "../types";
-import { AreaField, IoEditor, KV, SelectField, TextField } from "./fields";
+import {
+  AreaField,
+  CollapseButton,
+  FieldRow,
+  IoEditor,
+  KV,
+  SelectField,
+  TextField,
+} from "./fields";
 
 export default function NodeDialog(props: {
   node: NodeSpec;
@@ -25,12 +33,18 @@ export default function NodeDialog(props: {
 }) {
   const { node, run, editable } = props;
   const [showTools, setShowTools] = useState(false);
+  const [customModel, setCustomModel] = useState(false);
+  useEffect(() => setCustomModel(false), [node.id]);
   const rt = run?.derived.nodes.get(node.id);
   const statusNode = run?.status?.nodes?.[node.id];
   const activity = run?.activity.get(node.id) ?? [];
 
   const set = (patch: Partial<NodeSpec>) => props.onChange({ ...node, ...patch });
   const ro = !editable;
+
+  const models = PROVIDER_MODELS[node.provider ?? ""] ?? [];
+  const knownModel = models.some((m) => m.id === node.model);
+  const modelCustom = customModel || (!knownModel && !!node.model);
 
   const received = rt?.receivedInputs ?? new Set<string>();
   const written = rt?.writtenOutputs ?? new Set<string>();
@@ -44,9 +58,7 @@ export default function NodeDialog(props: {
         <span className="dialog-sub">
           {node.type === "llm" ? `${node.provider} · ${node.model ?? ""}` : node.type}
         </span>
-        <button className="icon-btn" onClick={props.onClose} title="Close">
-          ×
-        </button>
+        <CollapseButton onClick={props.onClose} />
       </div>
 
       <div className="dialog-body">
@@ -81,25 +93,27 @@ export default function NodeDialog(props: {
 
             <div className="subsection">
               <div className="section-title">Identity</div>
-              <TextField
-                label="Node ID"
-                value={node.id}
-                mono
-                readOnly={ro}
-                onChange={editable ? (v) => set({ id: v }) : undefined}
-              />
-              <TextField
-                label="Rank"
-                value={String(node.rank)}
-                mono
-                readOnly={ro}
-                onChange={
-                  editable
-                    ? (v) => set({ rank: parseInt(v, 10) || 0 })
-                    : undefined
-                }
-                hint="Unique; scheduling proceeds by rank"
-              />
+              <FieldRow cols="2-1">
+                <TextField
+                  label="Node ID"
+                  value={node.id}
+                  mono
+                  readOnly={ro}
+                  onChange={editable ? (v) => set({ id: v }) : undefined}
+                />
+                <TextField
+                  label="Rank"
+                  value={String(node.rank)}
+                  mono
+                  readOnly={ro}
+                  onChange={
+                    editable
+                      ? (v) => set({ rank: parseInt(v, 10) || 0 })
+                      : undefined
+                  }
+                  hint="Unique; scheduling proceeds by rank"
+                />
+              </FieldRow>
             </div>
 
             <div className="subsection">
@@ -107,7 +121,7 @@ export default function NodeDialog(props: {
               <AreaField
                 label="Gating expression"
                 value={node.gate ?? ""}
-                rows={2}
+                rows={6}
                 placeholder="default: AND of all in-edge terms"
                 readOnly={ro}
                 onChange={editable ? (v) => set({ gate: v || null }) : undefined}
@@ -115,7 +129,7 @@ export default function NodeDialog(props: {
               <AreaField
                 label="Output expression"
                 value={node.output_expression ?? ""}
-                rows={2}
+                rows={3}
                 placeholder="default: isDefined() over every declared output"
                 readOnly={ro}
                 onChange={
@@ -127,46 +141,98 @@ export default function NodeDialog(props: {
             {node.type === "llm" && (
               <div className="subsection">
                 <div className="section-title">Model invocation</div>
-                <SelectField
-                  label="Provider"
-                  value={node.provider ?? "claude"}
-                  options={["claude", "codex", "grok"]}
-                  readOnly={ro}
-                  onChange={editable ? (v) => set({ provider: v }) : undefined}
-                />
-                <TextField
-                  label="Model"
-                  value={node.model ?? ""}
-                  mono
-                  list={`models-${node.provider}`}
-                  readOnly={ro}
-                  onChange={editable ? (v) => set({ model: v }) : undefined}
-                />
-                <datalist id={`models-${node.provider}`}>
-                  {(PROVIDER_MODELS[node.provider ?? ""] ?? []).map((m) => (
-                    <option key={m} value={m} />
-                  ))}
-                </datalist>
-                <SelectField
-                  label="Effort"
-                  value={node.effort ?? ""}
-                  options={EFFORTS}
-                  allowEmpty
-                  readOnly={ro}
-                  onChange={editable ? (v) => set({ effort: v || null }) : undefined}
-                />
+                <FieldRow cols={3}>
+                  <SelectField
+                    label="Provider"
+                    value={node.provider ?? "claude"}
+                    options={["claude", "codex", "grok"]}
+                    readOnly={ro}
+                    onChange={
+                      editable
+                        ? (v) => {
+                            setCustomModel(false);
+                            set({
+                              provider: v,
+                              model: PROVIDER_MODELS[v]?.[0]?.id ?? node.model,
+                            });
+                          }
+                        : undefined
+                    }
+                  />
+                  <SelectField
+                    label="Model"
+                    value={modelCustom ? "__custom__" : node.model ?? ""}
+                    options={[
+                      ...models.map((m) => ({ label: m.alias, value: m.id })),
+                      { label: "Custom…", value: "__custom__" },
+                    ]}
+                    allowEmpty={!node.model && !modelCustom}
+                    readOnly={ro}
+                    hint="The saved definition carries the model id, not the alias"
+                    onChange={
+                      editable
+                        ? (v) => {
+                            if (v === "__custom__") setCustomModel(true);
+                            else {
+                              setCustomModel(false);
+                              set({ model: v });
+                            }
+                          }
+                        : undefined
+                    }
+                  />
+                  <SelectField
+                    label="Effort"
+                    value={node.effort ?? ""}
+                    options={EFFORTS}
+                    allowEmpty
+                    readOnly={ro}
+                    onChange={editable ? (v) => set({ effort: v || null }) : undefined}
+                  />
+                </FieldRow>
+                {modelCustom && (
+                  <TextField
+                    label="Model ID"
+                    value={node.model ?? ""}
+                    mono
+                    readOnly={ro}
+                    hint="Passed verbatim to the provider CLI"
+                    onChange={editable ? (v) => set({ model: v }) : undefined}
+                  />
+                )}
                 <AreaField
                   label="Prompt"
-                  value={node.prompt ?? (node.prompt_ref ? `<callable: ${node.prompt_ref}>` : "")}
-                  rows={7}
-                  readOnly={ro || node.prompt == null && !!node.prompt_ref}
+                  value={node.prompt ?? ""}
+                  rows={12}
+                  readOnly={ro}
+                  placeholder={
+                    node.prompt_ref
+                      ? `provided by helper ${node.prompt_ref}(inputs) — type here to override with a literal prompt`
+                      : undefined
+                  }
                   hint="$name placeholders substitute captured inputs"
                   onChange={
-                    editable && !(node.prompt == null && node.prompt_ref)
-                      ? (v) => set({ prompt: v })
+                    editable
+                      ? (v) =>
+                          set({ prompt: v === "" && node.prompt_ref ? null : v })
                       : undefined
                   }
                 />
+                {node.prompt_ref && editable && (
+                  <div className="hint-text">
+                    {node.prompt == null ? (
+                      <>
+                        Prompt is produced by helper <code>{node.prompt_ref}</code>{" "}
+                        (Graph settings → Helpers).
+                      </>
+                    ) : (
+                      <>
+                        Overriding helper <code>{node.prompt_ref}</code> with the
+                        literal prompt above; clear the box to restore the helper.
+                      </>
+                    )}
+                  </div>
+                )}
                 <TextField
                   label="Settings file"
                   value={node.settings ?? ""}
@@ -182,43 +248,47 @@ export default function NodeDialog(props: {
                   readOnly={ro}
                   onChange={editable ? (v) => set({ cwd: v || null }) : undefined}
                 />
-                <TextField
-                  label="Extra CLI args"
-                  value={(node.extra_args ?? []).join(" ")}
-                  mono
-                  readOnly={ro}
-                  hint="Space-separated; appended to the provider invocation"
-                  onChange={
-                    editable
-                      ? (v) => set({ extra_args: v.trim() ? v.trim().split(/\s+/) : [] })
-                      : undefined
-                  }
-                />
-                <TextField
-                  label="Timeout (s)"
-                  value={node.timeout_s == null ? "" : String(node.timeout_s)}
-                  mono
-                  readOnly={ro}
-                  onChange={
-                    editable
-                      ? (v) => set({ timeout_s: v.trim() ? Number(v) : null })
-                      : undefined
-                  }
-                />
-                <TextField
-                  label="Pause message"
-                  value={node.pause_message ?? ""}
-                  readOnly={ro}
-                  placeholder="graph / runtime default"
-                  onChange={editable ? (v) => set({ pause_message: v || null }) : undefined}
-                />
-                <TextField
-                  label="Resume message"
-                  value={node.resume_message ?? ""}
-                  readOnly={ro}
-                  placeholder="graph / runtime default"
-                  onChange={editable ? (v) => set({ resume_message: v || null }) : undefined}
-                />
+                <FieldRow cols="2-1">
+                  <TextField
+                    label="Extra CLI args"
+                    value={(node.extra_args ?? []).join(" ")}
+                    mono
+                    readOnly={ro}
+                    hint="Space-separated; appended to the provider invocation"
+                    onChange={
+                      editable
+                        ? (v) => set({ extra_args: v.trim() ? v.trim().split(/\s+/) : [] })
+                        : undefined
+                    }
+                  />
+                  <TextField
+                    label="Timeout (s)"
+                    value={node.timeout_s == null ? "" : String(node.timeout_s)}
+                    mono
+                    readOnly={ro}
+                    onChange={
+                      editable
+                        ? (v) => set({ timeout_s: v.trim() ? Number(v) : null })
+                        : undefined
+                    }
+                  />
+                </FieldRow>
+                <FieldRow cols={2}>
+                  <TextField
+                    label="Pause message"
+                    value={node.pause_message ?? ""}
+                    readOnly={ro}
+                    placeholder="graph / runtime default"
+                    onChange={editable ? (v) => set({ pause_message: v || null }) : undefined}
+                  />
+                  <TextField
+                    label="Resume message"
+                    value={node.resume_message ?? ""}
+                    readOnly={ro}
+                    placeholder="graph / runtime default"
+                    onChange={editable ? (v) => set({ resume_message: v || null }) : undefined}
+                  />
+                </FieldRow>
               </div>
             )}
 
@@ -252,34 +322,57 @@ export default function NodeDialog(props: {
                 <div className="section-title">Human shell</div>
                 <AreaField
                   label="Prompt"
-                  value={node.prompt ?? (node.prompt_ref ? `<callable: ${node.prompt_ref}>` : "")}
-                  rows={5}
-                  readOnly={ro || (node.prompt == null && !!node.prompt_ref)}
-                  onChange={
-                    editable && !(node.prompt == null && node.prompt_ref)
-                      ? (v) => set({ prompt: v })
+                  value={node.prompt ?? ""}
+                  rows={8}
+                  readOnly={ro}
+                  placeholder={
+                    node.prompt_ref
+                      ? `provided by helper ${node.prompt_ref}(inputs) — type here to override with a literal prompt`
                       : undefined
                   }
-                />
-                <TextField
-                  label="Shell command"
-                  value={node.shell_cmd ?? ""}
-                  mono
-                  readOnly={ro}
-                  placeholder="default human-shell executable"
-                  onChange={editable ? (v) => set({ shell_cmd: v || null }) : undefined}
-                />
-                <TextField
-                  label="Timeout (s)"
-                  value={node.timeout_s == null ? "" : String(node.timeout_s)}
-                  mono
-                  readOnly={ro}
                   onChange={
                     editable
-                      ? (v) => set({ timeout_s: v.trim() ? Number(v) : null })
+                      ? (v) =>
+                          set({ prompt: v === "" && node.prompt_ref ? null : v })
                       : undefined
                   }
                 />
+                {node.prompt_ref && editable && (
+                  <div className="hint-text">
+                    {node.prompt == null ? (
+                      <>
+                        Prompt is produced by helper <code>{node.prompt_ref}</code>{" "}
+                        (Graph settings → Helpers).
+                      </>
+                    ) : (
+                      <>
+                        Overriding helper <code>{node.prompt_ref}</code> with the
+                        literal prompt above; clear the box to restore the helper.
+                      </>
+                    )}
+                  </div>
+                )}
+                <FieldRow cols="2-1">
+                  <TextField
+                    label="Shell command"
+                    value={node.shell_cmd ?? ""}
+                    mono
+                    readOnly={ro}
+                    placeholder="default human-shell executable"
+                    onChange={editable ? (v) => set({ shell_cmd: v || null }) : undefined}
+                  />
+                  <TextField
+                    label="Timeout (s)"
+                    value={node.timeout_s == null ? "" : String(node.timeout_s)}
+                    mono
+                    readOnly={ro}
+                    onChange={
+                      editable
+                        ? (v) => set({ timeout_s: v.trim() ? Number(v) : null })
+                        : undefined
+                    }
+                  />
+                </FieldRow>
               </div>
             )}
 

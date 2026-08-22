@@ -15,6 +15,32 @@ export function Field(props: { label: string; children: ReactNode; hint?: string
   );
 }
 
+/** Grid row placing short fields side by side instead of stacked. */
+export function FieldRow(props: { cols?: 2 | 3 | "2-1"; children: ReactNode }) {
+  return <div className={`field-row cols-${props.cols ?? 2}`}>{props.children}</div>;
+}
+
+/** The inspector panel's minimize control: a collapse-to-sidebar glyph, not a
+ * close ×. Clicking empty canvas does the same thing. */
+export function CollapseButton(props: { onClick: () => void }) {
+  return (
+    <button className="icon-btn collapse-btn" onClick={props.onClick} title="Minimize panel">
+      <svg
+        width="15"
+        height="15"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+      >
+        <rect x="1.7" y="2.7" width="12.6" height="10.6" rx="2" />
+        <line x1="10.3" y1="2.7" x2="10.3" y2="13.3" />
+        <rect x="10.3" y="2.7" width="4" height="10.6" fill="currentColor" stroke="none" opacity="0.35" />
+      </svg>
+    </button>
+  );
+}
+
 export function TextField(props: {
   label: string;
   value: string;
@@ -64,25 +90,34 @@ export function AreaField(props: {
   );
 }
 
+export interface SelectOption {
+  label: string;
+  value: string;
+}
+
 export function SelectField(props: {
   label: string;
   value: string;
-  options: string[];
+  options: (string | SelectOption)[];
   onChange?: (v: string) => void;
   readOnly?: boolean;
   allowEmpty?: boolean;
+  hint?: string;
 }) {
+  const opts = props.options.map((o) =>
+    typeof o === "string" ? { label: o, value: o } : o,
+  );
   return (
-    <Field label={props.label}>
+    <Field label={props.label} hint={props.hint}>
       <select
         value={props.value}
         disabled={props.readOnly || !props.onChange}
         onChange={(e) => props.onChange?.(e.target.value)}
       >
         {props.allowEmpty && <option value="">—</option>}
-        {props.options.map((o) => (
-          <option key={o} value={o}>
-            {o}
+        {opts.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
           </option>
         ))}
       </select>

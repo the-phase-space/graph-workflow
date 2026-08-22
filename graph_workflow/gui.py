@@ -12,12 +12,18 @@ invoked by the Monitor GUI as a CLI::
 
 Loading *executes* the graph definition (the file is the entry point and
 composition root) with ``run()`` intercepted, so any definition that would
-start a run can be captured, visualized, and validated. Saving generates a
-structured executable definition from the contract. Arbitrary handwritten
-Python outside the structured contract is not presumed to be losslessly
-reversible into editable GUI elements: unrecoverable callables surface as
-opaque references, and saving over a file that is not in the structured
-format is refused unless forced.
+start a run can be captured, visualized, and validated. Loading an
+unstructured (handwritten) definition carves its module-level helper code —
+everything the structured regeneration would not re-emit — into the
+contract's helpers section so nothing the graph references is lost on the
+first structured save. Saving generates a structured executable definition
+from the contract, proves it executes in a temp file, and only then replaces
+the target; a save that would produce a broken definition fails without
+touching the file on disk. Arbitrary handwritten Python outside the
+structured contract is not presumed to be losslessly reversible into
+editable GUI elements: unrecoverable callables surface as opaque references,
+and saving over a file that is not in the structured format is refused
+unless forced.
 """
 
 from __future__ import annotations
@@ -27,6 +33,7 @@ import contextlib
 import inspect
 import io
 import json
+import os
 import re
 import sys
 import textwrap
@@ -257,6 +264,81 @@ def _extract_section(text: str, begin: str, end: str) -> str | None:
     return textwrap.dedent(text[i:j]).strip("\n")
 
 
+_GW_CLASSES = {
+    "Graph", "LLMNode", "ScriptNode", "HumanNode", "Edge", "Gate",
+    "Semaphores", "Generator",
+}
+
+
+def _carve_helpers(text: str, graph: Graph, namespace: dict) -> str:
+    """Best-effort helpers extraction from an unstructured definition:
+    every top-level statement except the pieces the structured regeneration
+    re-emits (module docstring, graph_workflow imports, graph-element
+    construction, registration and run calls, and the ``__main__`` block).
+    Seeding the contract's helpers section with this keeps the prompt
+    callables, script functions, and expression helpers a handwritten file
+    defines from being silently discarded on the first structured save."""
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return ""
+    lines = text.splitlines()
+    graph_names = {k for k, v in namespace.items() if v is graph}
+
+    def call_name(call: ast.Call) -> str | None:
+        if isinstance(call.func, ast.Name):
+            return call.func.id
+        if isinstance(call.func, ast.Attribute):
+            return call.func.attr
+        return None
+
+    def is_boilerplate(stmt: ast.stmt) -> bool:
+        if (
+            isinstance(stmt, ast.Expr)
+            and isinstance(stmt.value, ast.Constant)
+            and isinstance(stmt.value.value, str)
+        ):
+            return True  # module docstring
+        if isinstance(stmt, ast.ImportFrom):
+            return (stmt.module or "").split(".")[0] == "graph_workflow"
+        if isinstance(stmt, ast.Import):
+            return all(a.name.split(".")[0] == "graph_workflow" for a in stmt.names)
+        if isinstance(stmt, (ast.Assign, ast.AnnAssign)) and isinstance(
+            getattr(stmt, "value", None), ast.Call
+        ):
+            if call_name(stmt.value) in _GW_CLASSES:
+                return True
+        if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+            f = stmt.value.func
+            if (
+                isinstance(f, ast.Attribute)
+                and isinstance(f.value, ast.Name)
+                and f.value.id in graph_names
+                and f.attr in {"add_node", "add_nodes", "add_edge", "add_edges"}
+            ):
+                return True
+            if isinstance(f, ast.Name) and f.id in {"run", "resume_run"}:
+                return True
+        if isinstance(stmt, ast.If):
+            t = stmt.test
+            if (
+                isinstance(t, ast.Compare)
+                and isinstance(t.left, ast.Name)
+                and t.left.id == "__name__"
+            ):
+                return True
+        return False
+
+    def segment(stmt: ast.stmt) -> str:
+        start = stmt.lineno
+        for dec in getattr(stmt, "decorator_list", None) or []:
+            start = min(start, dec.lineno)
+        return "\n".join(lines[start - 1 : stmt.end_lineno])
+
+    kept = [segment(s).rstrip() for s in tree.body if not is_boilerplate(s)]
+    return "\n\n".join(k for k in kept if k).strip("\n")
+
+
 def load_contract(path) -> dict:
     path = Path(path).resolve()
     graph, namespace = capture(path)
@@ -268,7 +350,10 @@ def load_contract(path) -> dict:
         warnings = []
     text = path.read_text(encoding="utf-8")
     structured = _GRAPH_BEGIN in text
-    helpers = _extract_section(text, _HELPERS_BEGIN, _HELPERS_END) if structured else None
+    if structured:
+        helpers = _extract_section(text, _HELPERS_BEGIN, _HELPERS_END)
+    else:
+        helpers = _carve_helpers(text, graph, namespace)
     return {
         "ok": True,
         "version": CONTRACT_VERSION,
@@ -501,8 +586,29 @@ def save_contract(path, contract: dict, force: bool = False) -> dict:
                 "saving over it would discard handwritten Python (use force)"
             )
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8", newline="\n")
-    return load_contract(path)
+    # Prove the regenerated definition executes before touching the target:
+    # compile() only catches syntax, not a graph section referencing names
+    # the helpers section no longer defines. The candidate runs from a temp
+    # file and atomically replaces the target only on success, so a failed
+    # save can never leave a broken definition on disk.
+    tmp = path.with_name(path.name + ".gw-tmp")
+    tmp.write_text(text, encoding="utf-8", newline="\n")
+    try:
+        try:
+            result = load_contract(tmp)
+        except Exception as exc:
+            raise RuntimeError(
+                f"regenerated definition failed to execute "
+                f"({type(exc).__name__}: {exc}); {path.name} was left untouched. "
+                "Check that the helpers section defines every name the graph "
+                "references."
+            ) from exc
+        os.replace(tmp, path)
+    finally:
+        with contextlib.suppress(OSError):
+            tmp.unlink()
+    result["path"] = str(path)
+    return result
 
 
 def template(name: str = "untitled") -> dict:
