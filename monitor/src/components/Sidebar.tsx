@@ -2,9 +2,16 @@
 // validator, graph-level statistics, and the run controls (orderly Pause /
 // Resume above a smaller, immediate red Stop).
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { totalTokens, visualState, type RunState } from "../runstate";
 import { fmtDuration, fmtTokens, type GraphModel, type Selection } from "../types";
+
+// Resizable via the right-edge handle; dragging below the collapse threshold
+// snaps to the minimized rail (the » button restores the previous width).
+const SIDEBAR_MIN_W = 150;
+const SIDEBAR_MAX_W = 420;
+const SIDEBAR_COLLAPSE_W = 110;
+const SIDEBAR_DEFAULT_W = 202;
 
 export interface ValidationReport {
   errors: string[];
@@ -39,7 +46,53 @@ export default function Sidebar(props: {
 }) {
   const [minimized, setMinimized] = useState(false);
   const [seed, setSeed] = useState("");
+  const [width, setWidth] = useState<number>(() => {
+    const stored = Number(localStorage.getItem("gw-sidebar-width"));
+    return Number.isFinite(stored) && stored >= SIDEBAR_MIN_W && stored <= SIDEBAR_MAX_W
+      ? stored
+      : SIDEBAR_DEFAULT_W;
+  });
+  const widthRef = useRef(width);
+  const elRef = useRef<HTMLDivElement>(null);
+  const resizing = useRef(false);
   const { mode, run } = props;
+
+  const startResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    resizing.current = true;
+    document.body.classList.add("col-resizing");
+  };
+
+  useEffect(() => {
+    const stop = () => {
+      resizing.current = false;
+      document.body.classList.remove("col-resizing");
+    };
+    const move = (e: MouseEvent) => {
+      if (!resizing.current) return;
+      const left = elRef.current?.getBoundingClientRect().left ?? 0;
+      const raw = e.clientX - left;
+      if (raw < SIDEBAR_COLLAPSE_W) {
+        stop();
+        setMinimized(true);
+        return;
+      }
+      const w = Math.min(SIDEBAR_MAX_W, Math.max(SIDEBAR_MIN_W, Math.round(raw)));
+      widthRef.current = w;
+      setWidth(w);
+    };
+    const up = () => {
+      if (!resizing.current) return;
+      stop();
+      localStorage.setItem("gw-sidebar-width", String(widthRef.current));
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    return () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+  }, []);
 
   if (minimized) {
     return (
@@ -107,7 +160,13 @@ export default function Sidebar(props: {
   }
 
   return (
-    <div className="sidebar">
+    <div className="sidebar" ref={elRef} style={{ width }}>
+      <div
+        className="sidebar-handle"
+        style={{ left: width - 4 }}
+        title="Drag to resize"
+        onMouseDown={startResize}
+      />
       <div className="sidebar-head">
         <span className={"mode-badge " + mode}>{mode === "build" ? "BUILD" : "EXECUTION"}</span>
         <button className="icon-btn" title="Minimize sidebar" onClick={() => setMinimized(true)}>
@@ -129,7 +188,7 @@ export default function Sidebar(props: {
                 Save As…
               </button>
               <button onClick={props.onValidate} disabled={!props.model} className="validate-btn">
-                ✓ Run input/output validator
+                Run input/output validator
               </button>
             </div>
             {props.path && <div className="path-note" title={props.path}>{props.path}</div>}
