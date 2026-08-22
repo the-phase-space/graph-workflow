@@ -1,6 +1,8 @@
 // The graph canvas: nearly the whole window. SVG rendering with mouse-drag
 // panning, scroll-wheel zooming, and a fit-to-view control at the top right.
-// The default viewport shows the whole graph. Nodes are not user-movable.
+// The default viewport shows the whole graph. Nodes are not individually
+// movable (layout is automatic); a pan drag may start anywhere, including on
+// top of a node, edge, or the Generator.
 
 import {
   useCallback,
@@ -219,6 +221,14 @@ export default function Canvas(props: {
 
   const now = Date.now() / 1000;
 
+  // Selection changes only apply to genuine clicks: a pan drag that started
+  // on top of an element still ends with that element's click event, and it
+  // must not alter (or dismiss) the current selection.
+  const guardedSelect = (s: Selection | null) => {
+    if (moved.current) return;
+    onSelect(s);
+  };
+
   return (
     <div
       ref={holder}
@@ -232,11 +242,7 @@ export default function Canvas(props: {
       onClick={() => {
         // Clicking empty canvas minimizes the inspector; a pan drag that ends
         // over the canvas still emits a click, so suppress those.
-        if (moved.current) {
-          moved.current = false;
-          return;
-        }
-        onSelect(null);
+        guardedSelect(null);
       }}
     >
       <svg width={size.w} height={size.h} className="canvas-svg">
@@ -253,7 +259,7 @@ export default function Canvas(props: {
               key={g.id}
               geom={g}
               selected={selection?.kind === "edge" && selection.id === g.id}
-              onSelect={() => onSelect({ kind: "edge", id: g.id })}
+              onSelect={() => guardedSelect({ kind: "edge", id: g.id })}
             />
           ))}
           {model.nodes.map((n) => {
@@ -273,14 +279,13 @@ export default function Canvas(props: {
                 key={n.id}
                 className="node"
                 filter={glow ? `url(#glow-${vs})` : undefined}
-                onMouseDown={(e) => e.stopPropagation()}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onSelect({ kind: "node", id: n.id });
+                  guardedSelect({ kind: "node", id: n.id });
                 }}
               >
                 <rect
@@ -322,7 +327,7 @@ export default function Canvas(props: {
             rect={layout.rects.get(GEN)}
             fired={run?.derived.runStartTs != null}
             selected={selection?.kind === "generator"}
-            onSelect={() => onSelect({ kind: "generator", id: GEN })}
+            onSelect={() => guardedSelect({ kind: "generator", id: GEN })}
           />
         </g>
       </svg>
@@ -392,7 +397,6 @@ function GeneratorGlyph(props: {
   return (
     <g
       className="node"
-      onMouseDown={(e) => e.stopPropagation()}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -428,7 +432,6 @@ function EdgePaths(props: {
   return (
     <g
       className="edge"
-      onMouseDown={(e) => e.stopPropagation()}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
