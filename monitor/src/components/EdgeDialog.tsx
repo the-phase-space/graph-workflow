@@ -4,7 +4,9 @@
 
 import { normalizeEdgeGates } from "../graphops";
 import {
+  DEFAULT_LABEL_TEMPLATE,
   GEN,
+  nodeLabel,
   type EdgeSpec,
   type GateSpec,
   type GraphModel,
@@ -61,6 +63,11 @@ export function EdgeDialog(props: {
 }) {
   const { edge, model, editable } = props;
   const nodeIds = [GEN, ...model.nodes.map((n) => n.id)];
+  const labelOf = (id: string) => {
+    if (id === GEN) return "Generator";
+    const n = model.nodes.find((x) => x.id === id);
+    return n ? nodeLabel(n) : id;
+  };
   const set = (patch: Partial<EdgeSpec>) =>
     props.onChange(normalizeEdgeGates({ ...edge, ...patch }));
 
@@ -99,7 +106,10 @@ export function EdgeDialog(props: {
                   checked={edge.inputs.includes(id)}
                   onChange={() => toggle("inputs", id)}
                 />
-                <span className="mono">{id === GEN ? "Generator" : id}</span>
+                <span>{labelOf(id)}</span>
+                {labelOf(id) !== id && id !== GEN && (
+                  <span className="mono chk-id">{id}</span>
+                )}
               </label>
             ))}
           </div>
@@ -115,7 +125,10 @@ export function EdgeDialog(props: {
                     checked={edge.outputs.includes(id)}
                     onChange={() => toggle("outputs", id)}
                   />
-                  <span className="mono">{id}</span>
+                  <span>{labelOf(id)}</span>
+                  {labelOf(id) !== id && (
+                    <span className="mono chk-id">{id}</span>
+                  )}
                 </label>
               ))}
           </div>
@@ -210,6 +223,15 @@ export function GraphDialog(props: {
             value={model.name}
             readOnly={!editable}
             onChange={editable ? (v) => set({ name: v }) : undefined}
+          />
+          <TextField
+            label="Default node label"
+            value={model.label_template ?? ""}
+            mono
+            readOnly={!editable}
+            placeholder={DEFAULT_LABEL_TEMPLATE}
+            hint="Template for new nodes' labels — %provider and %model substitute, with 1, 2, … appended for uniqueness. Already-assigned labels never change."
+            onChange={editable ? (v) => set({ label_template: v || null }) : undefined}
           />
         </div>
         <div className="subsection">

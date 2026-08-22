@@ -60,6 +60,8 @@ _HELPERS_BEGIN = "# --- gw:helpers ---"
 _HELPERS_END = "# --- gw:end-helpers ---"
 _GRAPH_BEGIN = "# --- gw:graph ---"
 _GRAPH_END = "# --- gw:end-graph ---"
+_GUI_BEGIN = "# --- gw:gui ---"
+_GUI_END = "# --- gw:end-gui ---"
 
 _BARE_TYPES = {"str", "int", "float", "bool", "dict", "list", "tuple", "set", "bytes"}
 
@@ -264,6 +266,37 @@ def _extract_section(text: str, begin: str, end: str) -> str | None:
     return textwrap.dedent(text[i:j]).strip("\n")
 
 
+def _gui_meta(contract: dict) -> dict | None:
+    """Monitor-only display metadata (node labels, the default-label
+    template) destined for the definition's gw:gui comment section. The
+    runtime never sees any of it: the section is pure comments."""
+    g = contract.get("graph") or {}
+    meta: dict = {}
+    tmpl = g.get("label_template")
+    if isinstance(tmpl, str) and tmpl.strip():
+        meta["label_template"] = tmpl.strip()
+    labels = {
+        n["id"]: n["label"].strip()
+        for n in g.get("nodes", [])
+        if isinstance(n.get("label"), str) and n["label"].strip()
+    }
+    if labels:
+        meta["labels"] = labels
+    return meta or None
+
+
+def _parse_gui_meta(text: str) -> dict:
+    section = _extract_section(text, _GUI_BEGIN, _GUI_END)
+    if not section:
+        return {}
+    payload = "\n".join(re.sub(r"^\s*#\s?", "", ln) for ln in section.splitlines())
+    try:
+        meta = json.loads(payload)
+    except ValueError:
+        return {}
+    return meta if isinstance(meta, dict) else {}
+
+
 _GW_CLASSES = {
     "Graph", "LLMNode", "ScriptNode", "HumanNode", "Edge", "Gate",
     "Semaphores", "Generator",
@@ -354,7 +387,7 @@ def load_contract(path) -> dict:
         helpers = _extract_section(text, _HELPERS_BEGIN, _HELPERS_END)
     else:
         helpers = _carve_helpers(text, graph, namespace)
-    return {
+    contract = {
         "ok": True,
         "version": CONTRACT_VERSION,
         "path": str(path),
@@ -365,6 +398,19 @@ def load_contract(path) -> dict:
         "warnings": list(warnings),
         "providers": known_providers(),
     }
+    gui_meta = _parse_gui_meta(text)
+    if gui_meta:
+        gmodel = contract["graph"]
+        tmpl = gui_meta.get("label_template")
+        if isinstance(tmpl, str) and tmpl.strip():
+            gmodel["label_template"] = tmpl.strip()
+        labels = gui_meta.get("labels")
+        if isinstance(labels, dict):
+            for nd in gmodel["nodes"]:
+                lab = labels.get(nd["id"])
+                if isinstance(lab, str) and lab.strip():
+                    nd["label"] = lab.strip()
+    return contract
 
 
 # --------------------------------------------------------------------------- #
@@ -545,6 +591,14 @@ def generate(contract: dict) -> str:
         "section is regenerated on every save; the gw:helpers section is\n"
         'preserved verbatim and is yours to edit."""'
     )
+    # Monitor-only display metadata rides as a comment section the runtime
+    # never parses (node labels, the default-label template).
+    meta = _gui_meta(contract)
+    gui_section = (
+        [_GUI_BEGIN, "# " + json.dumps(meta, ensure_ascii=False), _GUI_END, ""]
+        if meta
+        else []
+    )
     parts = [
         doc,
         "",
@@ -561,6 +615,7 @@ def generate(contract: dict) -> str:
         *body,
         _GRAPH_END,
         "",
+        *gui_section,
         'if __name__ == "__main__":',
         "    import os",
         "",

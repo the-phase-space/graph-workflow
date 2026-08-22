@@ -126,6 +126,23 @@ export default function App() {
     window.setTimeout(() => setNotice((n) => (n === text ? null : n)), 7000);
   }, []);
 
+  // Undo/redo state: every build-mode mutation funnels through mutate()
+  // (defined with the other build-mode operations below), so history is a
+  // bounded snapshot stack over the whole contract.
+  const contractRef = useRef<Contract | null>(null);
+  useEffect(() => {
+    contractRef.current = contract;
+  }, [contract]);
+  const pastRef = useRef<Contract[]>([]);
+  const futureRef = useRef<Contract[]>([]);
+  const lastEditRef = useRef<{ key: string; ts: number } | null>(null);
+
+  const resetHistory = useCallback(() => {
+    pastRef.current = [];
+    futureRef.current = [];
+    lastEditRef.current = null;
+  }, []);
+
   // -- opening / attaching ------------------------------------------------ //
 
   const openPath = useCallback(
@@ -138,6 +155,7 @@ export default function App() {
           return;
         }
         setContract(result);
+        resetHistory();
         setDirty(false);
         setSelection(null);
         setRunDir(null);
@@ -152,7 +170,7 @@ export default function App() {
         setBusy(null);
       }
     },
-    [report],
+    [report, resetHistory],
   );
 
   useEffect(() => {
@@ -226,13 +244,44 @@ export default function App() {
 
   // -- build-mode operations ---------------------------------------------- //
 
-  const mutate = useCallback(
-    (fn: (c: Contract) => Contract) => {
-      setContract((c) => (c ? fn(c) : c));
-      setDirty(true);
-    },
-    [],
-  );
+  const mutate = useCallback((fn: (c: Contract) => Contract, coalesce?: string) => {
+    const cur = contractRef.current;
+    if (!cur) return;
+    const now = Date.now();
+    const last = lastEditRef.current;
+    if (!(coalesce && last && last.key === coalesce && now - last.ts < 900)) {
+      pastRef.current.push(cur);
+      if (pastRef.current.length > 100) pastRef.current.shift();
+    }
+    lastEditRef.current = coalesce ? { key: coalesce, ts: now } : null;
+    futureRef.current = [];
+    const next = fn(cur);
+    contractRef.current = next;
+    setContract(next);
+    setDirty(true);
+  }, []);
+
+  const undo = useCallback(() => {
+    const cur = contractRef.current;
+    const prev = pastRef.current.pop();
+    if (!cur || !prev) return;
+    futureRef.current.push(cur);
+    lastEditRef.current = null;
+    contractRef.current = prev;
+    setContract(prev);
+    setDirty(true);
+  }, []);
+
+  const redo = useCallback(() => {
+    const cur = contractRef.current;
+    const next = futureRef.current.pop();
+    if (!cur || !next) return;
+    pastRef.current.push(cur);
+    lastEditRef.current = null;
+    contractRef.current = next;
+    setContract(next);
+    setDirty(true);
+  }, []);
 
   const doNew = useCallback(async () => {
     const result = await templateGraph("untitled");
@@ -241,11 +290,12 @@ export default function App() {
       return;
     }
     setContract(result);
+    resetHistory();
     setDirty(true);
     setRunDir(null);
     setSelection(null);
     setValidation(null);
-  }, [report]);
+  }, [report, resetHistory]);
 
   const doOpen = useCallback(async () => {
     const picked = await openDialog({
@@ -276,6 +326,9 @@ export default function App() {
           return null;
         }
         setContract(result);
+        // The post-save contract is a regeneration; keep undo history across
+        // the save, but never coalesce a later edit into a pre-save one.
+        lastEditRef.current = null;
         setDirty(false);
         setValidation(
           result.errors.length || result.warnings.length
@@ -309,14 +362,24 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const k = e.key.toLowerCase();
+      if (k === "s") {
         e.preventDefault();
         if (mode === "build") void doSave();
+      } else if (k === "z" && !e.shiftKey) {
+        if (mode !== "build") return;
+        e.preventDefault();
+        undo();
+      } else if ((k === "z" && e.shiftKey) || k === "y") {
+        if (mode !== "build") return;
+        e.preventDefault();
+        redo();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [mode, doSave]);
+  }, [mode, doSave, undo, redo]);
 
   const doValidate = useCallback(async () => {
     if (!contract) return;
@@ -385,6 +448,28 @@ export default function App() {
     [mutate],
   );
 
+  const doAddEdgeBetween = useCallback(
+    (from: string, to: string) =>
+      mutate((c) => {
+        const edge = makeEdge(c.graph, [from], [to]);
+        setSelection({ kind: "edge", id: edge.id });
+        return { ...c, graph: addEdge(c.graph, edge) };
+      }),
+    [mutate],
+  );
+
+  const doSetLabel = useCallback(
+    (id: string, label: string | null) =>
+      mutate((c) => ({
+        ...c,
+        graph: {
+          ...c.graph,
+          nodes: c.graph.nodes.map((n) => (n.id === id ? { ...n, label } : n)),
+        },
+      })),
+    [mutate],
+  );
+
   const doAttach = useCallback(async () => {
     const picked = await openDialog({ directory: true, multiple: false });
     if (typeof picked === "string") {
@@ -419,7 +504,7 @@ export default function App() {
           mutate((c) => {
             if (n.id !== selectedNode.id) setSelection({ kind: "node", id: n.id });
             return { ...c, graph: replaceNode(c.graph, selectedNode.id, n) };
-          })
+          }, `insp:node:${selectedNode.id}`)
         }
         onDelete={() => {
           setSelection(null);
@@ -436,7 +521,7 @@ export default function App() {
           mutate((c) => {
             if (e.id !== selectedEdge.id) setSelection({ kind: "edge", id: e.id });
             return { ...c, graph: replaceEdge(c.graph, selectedEdge.id, e) };
-          })
+          }, `insp:edge:${selectedEdge.id}`)
         }
         onDelete={() => {
           setSelection(null);
@@ -454,8 +539,8 @@ export default function App() {
         model={model}
         helpers={helpers}
         editable={editable}
-        onChange={(m) => mutate((c) => ({ ...c, graph: m }))}
-        onHelpers={(h) => mutate((c) => ({ ...c, helpers: h }))}
+        onChange={(m) => mutate((c) => ({ ...c, graph: m }), "insp:graph")}
+        onHelpers={(h) => mutate((c) => ({ ...c, helpers: h }), "insp:helpers")}
         onClose={() => setSelection(null)}
       />
     ) : null;
@@ -511,6 +596,8 @@ export default function App() {
             onSelect={setSelection}
             onAddNode={editable ? doAddNode : undefined}
             onAddEdge={editable ? doAddEdge : undefined}
+            onAddEdgeBetween={editable ? doAddEdgeBetween : undefined}
+            onSetLabel={editable ? doSetLabel : undefined}
           />
         ) : mode === "exec" ? (
           <div className="welcome">

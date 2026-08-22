@@ -2,7 +2,9 @@
 // Python backend re-derives authoritative semantics on save/validate.
 
 import {
+  DEFAULT_LABEL_TEMPLATE,
   GEN,
+  modelAlias,
   type EdgeSpec,
   type GateSpec,
   type GraphModel,
@@ -30,6 +32,29 @@ export function nextRank(g: GraphModel): number {
   return g.nodes.length ? Math.max(...g.nodes.map((n) => n.rank)) + 1 : 0;
 }
 
+/** Default label for a freshly created node, from the graph's label template
+ * (%provider/%model substitution), uniquified with a 1, 2, … suffix. Labels
+ * are assigned once at creation and never recomputed — later rank, model, or
+ * template changes leave existing labels alone. */
+export function defaultLabel(g: GraphModel, node: NodeSpec): string {
+  const template = (g.label_template ?? "").trim() || DEFAULT_LABEL_TEMPLATE;
+  const provider = node.type === "llm" ? node.provider ?? "llm" : node.type;
+  const model =
+    node.type === "llm" ? modelAlias(node.model, node.provider).toLowerCase() : "";
+  let base = template.replace(/%provider/g, provider).replace(/%model/g, model);
+  // Empty substitutions leave dangling separators ("script_"): collapse them.
+  base = base.replace(/[_\-.\s]{2,}/g, (m) => m[0]).replace(/^[_\-.\s]+|[_\-.\s]+$/g, "");
+  if (!base) base = node.type;
+  const taken = new Set<string>();
+  for (const n of g.nodes) {
+    taken.add(n.id);
+    const lab = (n.label ?? "").trim();
+    if (lab) taken.add(lab);
+  }
+  if (!taken.has(base)) return base;
+  for (let i = 1; ; i++) if (!taken.has(`${base}${i}`)) return `${base}${i}`;
+}
+
 export function makeNode(g: GraphModel, type: NodeType, provider?: string): NodeSpec {
   const taken = takenIds(g);
   const base =
@@ -43,44 +68,50 @@ export function makeNode(g: GraphModel, type: NodeType, provider?: string): Node
     gate: null,
     output_expression: null,
   };
-  if (type === "script")
-    return {
-      ...common,
-      type,
-      code: `def ${id}_fn(inputs):\n    return {}\n`,
-    };
-  if (type === "human")
-    return {
-      ...common,
-      type,
-      prompt: "Review and respond.",
-      outputs: { approved: "bool" },
-      timeout_s: null,
-    };
-  return {
-    ...common,
-    type: "llm",
-    provider: provider ?? "claude",
-    model:
-      provider === "codex" ? "gpt-5.6-luna" : provider === "grok" ? "grok-4.5" : "sonnet",
-    effort: "medium",
-    prompt: "",
-    outputs: { response: "str" },
-    extra_args: [],
-    timeout_s: 1800,
-  };
+  const node: NodeSpec =
+    type === "script"
+      ? {
+          ...common,
+          type,
+          code: `def ${id}_fn(inputs):\n    return {}\n`,
+        }
+      : type === "human"
+        ? {
+            ...common,
+            type,
+            prompt: "Review and respond.",
+            outputs: { approved: "bool" },
+            timeout_s: null,
+          }
+        : {
+            ...common,
+            type: "llm",
+            provider: provider ?? "claude",
+            model:
+              provider === "codex" ? "gpt-5.6-luna" : provider === "grok" ? "grok-4.5" : "sonnet",
+            effort: "medium",
+            prompt: "",
+            outputs: { response: "str" },
+            extra_args: [],
+            timeout_s: 1800,
+          };
+  return { ...node, label: defaultLabel(g, node) };
 }
 
-export function makeEdge(g: GraphModel): EdgeSpec {
+export function makeEdge(
+  g: GraphModel,
+  inputs: string[] = [],
+  outputs: string[] = [],
+): EdgeSpec {
   const taken = takenIds(g);
-  return {
+  return normalizeEdgeGates({
     id: uniqueId("e1", taken),
-    inputs: [],
-    outputs: [],
+    inputs,
+    outputs,
     universal_gate: { ...DEFAULT_GATE },
     input_gates: {},
     output_gates: {},
-  };
+  });
 }
 
 export function replaceNode(g: GraphModel, id: string, node: NodeSpec): GraphModel {

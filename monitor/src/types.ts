@@ -25,6 +25,8 @@ export interface NodeSpec {
   id: string;
   rank: number;
   type: NodeType;
+  /** GUI-owned display name; the runtime only ever sees the node id. */
+  label?: string | null;
   inputs: Record<string, string>;
   outputs: Record<string, string>;
   gate: string | null;
@@ -65,6 +67,8 @@ export interface GraphModel {
   resume_message: string | null;
   nodes: NodeSpec[];
   edges: EdgeSpec[];
+  /** Template for freshly created nodes' default labels (GUI-owned). */
+  label_template?: string | null;
 }
 
 export interface Contract {
@@ -202,6 +206,28 @@ export const PROVIDER_MODELS: Record<string, ModelOption[]> = {
 };
 
 export const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
+
+/** %provider/%model substitution source for default node labels. */
+export const DEFAULT_LABEL_TEMPLATE = "%provider_%model";
+
+/** Friendly alias for a model id (canvas display only — the definition and
+ * the CLI always carry the id). Falls back to the id itself. */
+export function modelAlias(model: string | null | undefined, provider?: string): string {
+  if (!model) return "";
+  const lists = provider && PROVIDER_MODELS[provider]
+    ? [PROVIDER_MODELS[provider]]
+    : Object.values(PROVIDER_MODELS);
+  for (const list of lists) {
+    const hit = list.find((m) => m.id === model);
+    if (hit) return hit.alias;
+  }
+  return model;
+}
+
+/** Display name for a node: its label when set, otherwise its id. */
+export function nodeLabel(n: Pick<NodeSpec, "id" | "label">): string {
+  return (n.label ?? "").trim() || n.id;
+}
 
 export function nodeFill(node: Pick<NodeSpec, "type" | "provider">): string {
   if (node.type === "script") return "var(--fill-script)";

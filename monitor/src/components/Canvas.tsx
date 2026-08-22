@@ -24,10 +24,50 @@ import {
   GEN,
   fmtDuration,
   fmtTokens,
+  modelAlias,
   nodeFill,
+  nodeLabel,
   type GraphModel,
+  type NodeSpec,
   type Selection,
 } from "../types";
+
+// ---------------------------------------------------------------------- //
+// Canvas text metrics: SVG <text> does not clip, so on-face strings are
+// ellipsis-truncated against measured pixel widths (fonts match styles.css).
+// ---------------------------------------------------------------------- //
+
+const LABEL_FONT = '700 15px "Segoe UI", system-ui, sans-serif';
+const SUB_FONT = "11.5px Consolas, monospace";
+const ID_BADGE_FONT = "9.5px Consolas, monospace";
+
+let measureCtx: CanvasRenderingContext2D | null = null;
+const measureCache = new Map<string, number>();
+
+function textWidth(text: string, font: string): number {
+  const key = font + "|" + text;
+  const hit = measureCache.get(key);
+  if (hit != null) return hit;
+  if (!measureCtx) measureCtx = document.createElement("canvas").getContext("2d");
+  if (!measureCtx) return text.length * 8;
+  measureCtx.font = font;
+  const w = measureCtx.measureText(text).width;
+  if (measureCache.size > 4000) measureCache.clear();
+  measureCache.set(key, w);
+  return w;
+}
+
+function fitText(text: string, maxPx: number, font: string): string {
+  if (textWidth(text, font) <= maxPx) return text;
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (textWidth(text.slice(0, mid) + "…", font) <= maxPx) lo = mid;
+    else hi = mid - 1;
+  }
+  return text.slice(0, lo) + "…";
+}
 
 const GLOW: Record<VisualState, string | null> = {
   running: "#f2c521",
@@ -90,12 +130,23 @@ export default function Canvas(props: {
   onSelect: (s: Selection | null) => void;
   onAddNode?: (kind: string) => void;
   onAddEdge?: () => void;
+  onAddEdgeBetween?: (from: string, to: string) => void;
+  onSetLabel?: (id: string, label: string | null) => void;
 }) {
-  const { model, run, selection, onSelect, onAddNode, onAddEdge } = props;
+  const { model, run, selection, onSelect, onAddNode, onAddEdge, onAddEdgeBetween, onSetLabel } =
+    props;
   const holder = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [view, setView] = useState<View>({ tx: 0, ty: 0, scale: 1 });
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  // Right-click menu on a node or the Generator ("Add edge to ▸").
+  const [nodeMenu, setNodeMenu] = useState<{ x: number; y: number; id: string } | null>(null);
+  // Dynamic edge connector ('e' on a selected node): a half-opacity edge
+  // follows the cursor until a target node is clicked. Coordinates are in
+  // graph space.
+  const [link, setLink] = useState<{ from: string; cx: number; cy: number } | null>(null);
+  // In-place label editor opened by double-clicking a node.
+  const [labelEdit, setLabelEdit] = useState<{ id: string; value: string } | null>(null);
   const drag = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
   const fittedFor = useRef<string>("");
 
@@ -165,6 +216,7 @@ export default function Canvas(props: {
   const moved = useRef(false);
   const onMouseDown = (e: React.MouseEvent) => {
     setCtxMenu(null);
+    setNodeMenu(null);
     if (e.button !== 0) return;
     moved.current = false;
     drag.current = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty };
@@ -174,6 +226,10 @@ export default function Canvas(props: {
   // webview's own context menu is suppressed everywhere on the canvas.
   const onContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
+    if (link) {
+      setLink(null);
+      return;
+    }
     if (!onAddNode) return;
     const rect = holder.current?.getBoundingClientRect();
     if (!rect) return;
@@ -183,12 +239,55 @@ export default function Canvas(props: {
     setCtxMenu({ x, y });
   };
 
+  // Right-clicking a node (or the Generator) offers edge creation from it.
+  const onElementContextMenu = (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxMenu(null);
+    if (link) {
+      setLink(null);
+      return;
+    }
+    if (!onAddEdgeBetween) return;
+    const rect = holder.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = Math.min(e.clientX - rect.left, Math.max(0, rect.width - 300));
+    const y = Math.min(e.clientY - rect.top, Math.max(0, rect.height - 90));
+    setNodeMenu({ x, y, id });
+  };
+
+  // While the dynamic edge connector is live, the preview endpoint tracks
+  // the cursor in graph coordinates.
+  const onLinkMouseMove = (e: React.MouseEvent) => {
+    const rect = holder.current?.getBoundingClientRect();
+    if (!rect) return;
+    const cx = (e.clientX - rect.left - view.tx) / view.scale;
+    const cy = (e.clientY - rect.top - view.ty) / view.scale;
+    setLink((l) => (l ? { ...l, cx, cy } : l));
+  };
+
+  // Clicking a node while linking completes the edge (clicking the source
+  // node abandons it instead; the Generator can never be a target).
+  const completeLink = (targetId: string) => {
+    if (!link) return;
+    if (link.from !== targetId) onAddEdgeBetween?.(link.from, targetId);
+    setLink(null);
+  };
+
   const menuRef = useRef<HTMLDivElement>(null);
+  const nodeMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!ctxMenu) return;
-    const dismiss = () => setCtxMenu(null);
+    if (!ctxMenu && !nodeMenu) return;
+    const dismiss = () => {
+      setCtxMenu(null);
+      setNodeMenu(null);
+    };
     const onDown = (e: MouseEvent) => {
-      if (e.target instanceof Node && menuRef.current?.contains(e.target)) return;
+      if (
+        e.target instanceof Node &&
+        (menuRef.current?.contains(e.target) || nodeMenuRef.current?.contains(e.target))
+      )
+        return;
       dismiss();
     };
     const onKey = (e: KeyboardEvent) => {
@@ -202,7 +301,45 @@ export default function Canvas(props: {
       window.removeEventListener("blur", dismiss);
       window.removeEventListener("keydown", onKey);
     };
-  }, [ctxMenu]);
+  }, [ctxMenu, nodeMenu]);
+
+  // 'e' with a node (or the Generator) selected starts the dynamic edge
+  // connector — unless the keystroke belongs to a focused form field, where
+  // 'e' must just type. Escape abandons an active connector.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setLink(null);
+        return;
+      }
+      if (e.key !== "e" || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (!onAddEdgeBetween || !selection) return;
+      if (selection.kind !== "node" && selection.kind !== "generator") return;
+      const t = document.activeElement;
+      if (
+        t instanceof HTMLElement &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT" ||
+          t.isContentEditable)
+      )
+        return;
+      const from = selection.kind === "generator" ? GEN : selection.id;
+      const r = layout.rects.get(from);
+      if (!r) return;
+      e.preventDefault();
+      setLink({ from, cx: r.x + r.w / 2, cy: r.y - 70 });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onAddEdgeBetween, selection, layout]);
+
+  // Abandon the connector or the label editor when its node leaves the model
+  // (deletion, undo, load).
+  useEffect(() => {
+    if (link && !layout.rects.has(link.from)) setLink(null);
+    if (labelEdit && !model.nodes.some((n) => n.id === labelEdit.id)) setLabelEdit(null);
+  }, [layout, model, link, labelEdit]);
   useEffect(() => {
     const move = (e: MouseEvent) => {
       const d = drag.current;
@@ -229,19 +366,42 @@ export default function Canvas(props: {
     onSelect(s);
   };
 
+  const commitLabelEdit = () => {
+    if (!labelEdit) return;
+    const node = model.nodes.find((n) => n.id === labelEdit.id);
+    const next = labelEdit.value.trim() || null;
+    if (node && next !== ((node.label ?? "").trim() || null)) onSetLabel?.(labelEdit.id, next);
+    setLabelEdit(null);
+  };
+
+  // "Add edge to ▸" target list: every other node, sorted by rank.
+  const edgeTargets = (from: string): NodeSpec[] =>
+    model.nodes
+      .filter((n) => n.id !== from)
+      .sort((a, b) => a.rank - b.rank || a.id.localeCompare(b.id));
+
+  const labelEditRect = labelEdit ? layout.rects.get(labelEdit.id) : undefined;
+
   return (
     <div
       ref={holder}
-      className="canvas-holder"
+      className={"canvas-holder" + (link ? " linking" : "")}
       onWheel={(e) => {
         setCtxMenu(null);
+        setNodeMenu(null);
         onWheel(e);
       }}
       onMouseDown={onMouseDown}
+      onMouseMove={link ? onLinkMouseMove : undefined}
       onContextMenu={onContextMenu}
       onClick={() => {
         // Clicking empty canvas minimizes the inspector; a pan drag that ends
         // over the canvas still emits a click, so suppress those.
+        if (moved.current) return;
+        if (link) {
+          setLink(null);
+          return;
+        }
         guardedSelect(null);
       }}
     >
@@ -259,7 +419,10 @@ export default function Canvas(props: {
               key={g.id}
               geom={g}
               selected={selection?.kind === "edge" && selection.id === g.id}
-              onSelect={() => guardedSelect({ kind: "edge", id: g.id })}
+              onSelect={() => {
+                if (link) return;
+                guardedSelect({ kind: "edge", id: g.id });
+              }}
             />
           ))}
           {model.nodes.map((n) => {
@@ -274,17 +437,28 @@ export default function Canvas(props: {
             const timer =
               vs === "running" && rt?.lastStartTs ? now - rt.lastStartTs : null;
             const isSel = selection?.kind === "node" && selection.id === n.id;
+            const label = nodeLabel(n);
             return (
               <g
                 key={n.id}
                 className="node"
                 filter={glow ? `url(#glow-${vs})` : undefined}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
+                onContextMenu={(e) => onElementContextMenu(e, n.id)}
+                onDoubleClick={
+                  onSetLabel
+                    ? (e) => {
+                        e.stopPropagation();
+                        setLabelEdit({ id: n.id, value: n.label ?? "" });
+                      }
+                    : undefined
+                }
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (moved.current) return;
+                  if (link) {
+                    completeLink(n.id);
+                    return;
+                  }
                   guardedSelect({ kind: "node", id: n.id });
                 }}
               >
@@ -299,17 +473,31 @@ export default function Canvas(props: {
                   strokeDasharray={vs === "paused" ? "7 5" : undefined}
                 />
                 <text x={r.x + r.w / 2} y={r.y + 24} className="node-name" textAnchor="middle">
-                  {n.id}
+                  {fitText(label, r.w - 22, LABEL_FONT)}
                 </text>
                 <text x={r.x + 12} y={r.y + r.h - 12} className="node-sub" textAnchor="start">
-                  {n.type === "llm"
-                    ? run
-                      ? `${fmtTokens(tokens)} tok`
-                      : n.model ?? ""
-                    : run && rt?.commits
-                      ? `${rt.commits}×`
-                      : ""}
+                  {fitText(
+                    n.type === "llm"
+                      ? run
+                        ? `${fmtTokens(tokens)} tok`
+                        : modelAlias(n.model, n.provider)
+                      : run && rt?.commits
+                        ? `${rt.commits}×`
+                        : "",
+                    r.w - 24,
+                    SUB_FONT,
+                  )}
                 </text>
+                {label !== n.id && timer == null && (
+                  <text
+                    x={r.x + r.w - 10}
+                    y={r.y + r.h - 12}
+                    className="node-id-badge"
+                    textAnchor="end"
+                  >
+                    {fitText(n.id, 64, ID_BADGE_FONT)}
+                  </text>
+                )}
                 {timer != null && (
                   <text
                     x={r.x + r.w - 12}
@@ -327,8 +515,31 @@ export default function Canvas(props: {
             rect={layout.rects.get(GEN)}
             fired={run?.derived.runStartTs != null}
             selected={selection?.kind === "generator"}
-            onSelect={() => guardedSelect({ kind: "generator", id: GEN })}
+            onSelect={() => {
+              if (link) return; // the Generator can never be an edge target
+              guardedSelect({ kind: "generator", id: GEN });
+            }}
+            onContextMenu={
+              onAddEdgeBetween ? (e) => onElementContextMenu(e, GEN) : undefined
+            }
           />
+          {link &&
+            (() => {
+              const r = layout.rects.get(link.from);
+              if (!r) return null;
+              const sx = r.x + r.w / 2;
+              const sy = r.y;
+              const dy = Math.max(30, Math.abs(link.cy - sy) * 0.45);
+              return (
+                <g className="link-preview-group">
+                  <path
+                    d={`M ${sx} ${sy} C ${sx} ${sy - dy}, ${link.cx} ${link.cy + dy}, ${link.cx} ${link.cy}`}
+                    className="edge-path link-preview"
+                  />
+                  <circle cx={link.cx} cy={link.cy} r={4.5} className="link-preview-dot" />
+                </g>
+              );
+            })()}
         </g>
       </svg>
       <button
@@ -382,6 +593,78 @@ export default function Canvas(props: {
           )}
         </div>
       )}
+      {nodeMenu && onAddEdgeBetween && (
+        <div
+          ref={nodeMenuRef}
+          className="ctx-menu"
+          style={{ left: nodeMenu.x, top: nodeMenu.y }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onWheel={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <div className="ctx-item has-sub">
+            <span>Add edge to</span>
+            <span className="ctx-caret">▸</span>
+            <div className="ctx-sub ctx-scroll">
+              {edgeTargets(nodeMenu.id).map((n) => (
+                <button
+                  key={n.id}
+                  className="ctx-item"
+                  onClick={() => {
+                    setNodeMenu(null);
+                    onAddEdgeBetween(nodeMenu.id, n.id);
+                  }}
+                >
+                  <span className="ctx-label">{nodeLabel(n)}</span>
+                  <span className="ctx-rank mono">#{n.rank}</span>
+                </button>
+              ))}
+              {edgeTargets(nodeMenu.id).length === 0 && (
+                <div className="ctx-empty">no other nodes</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {labelEdit && labelEditRect && (
+        <input
+          className="node-label-editor"
+          style={{
+            left: view.tx + labelEditRect.x * view.scale,
+            top: view.ty + labelEditRect.y * view.scale + 6 * view.scale,
+            width: labelEditRect.w * view.scale,
+            height: Math.max(16, 26 * view.scale),
+            fontSize: Math.max(9, 15 * view.scale),
+          }}
+          value={labelEdit.value}
+          placeholder={labelEdit.id}
+          spellCheck={false}
+          ref={(el) => {
+            if (el && document.activeElement !== el) {
+              el.focus();
+              el.select();
+            }
+          }}
+          onChange={(e) =>
+            setLabelEdit((le) => (le ? { ...le, value: e.target.value } : le))
+          }
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Enter") commitLabelEdit();
+            else if (e.key === "Escape") setLabelEdit(null);
+          }}
+          onBlur={commitLabelEdit}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+          onWheel={(e) => e.stopPropagation()}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -391,16 +674,20 @@ function GeneratorGlyph(props: {
   fired: boolean;
   selected: boolean;
   onSelect: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }) {
   const r = props.rect;
   if (!r) return null;
   return (
     <g
       className="node"
-      onContextMenu={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-      }}
+      onContextMenu={
+        props.onContextMenu ??
+        ((e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        })
+      }
       onClick={(e) => {
         e.stopPropagation();
         props.onSelect();

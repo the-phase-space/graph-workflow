@@ -10,6 +10,7 @@ import {
   PROVIDER_MODELS,
   fmtTokens,
   nodeFill,
+  nodeLabel,
   type ActivityItem,
   type NodeSpec,
 } from "../types";
@@ -54,8 +55,9 @@ export default function NodeDialog(props: {
     <div className="dialog node-dialog">
       <div className="dialog-head">
         <span className="swatch" style={{ background: nodeFill(node) }} />
-        <span className="dialog-title mono">{node.id}</span>
+        <span className="dialog-title mono">{nodeLabel(node)}</span>
         <span className="dialog-sub">
+          {nodeLabel(node) !== node.id ? `${node.id} · ` : ""}
           {node.type === "llm" ? `${node.provider} · ${node.model ?? ""}` : node.type}
         </span>
         <CollapseButton onClick={props.onClose} />
@@ -114,6 +116,14 @@ export default function NodeDialog(props: {
                   hint="Unique; scheduling proceeds by rank"
                 />
               </FieldRow>
+              <TextField
+                label="Label"
+                value={node.label ?? ""}
+                readOnly={ro}
+                placeholder={node.id}
+                hint="Display name on the canvas (double-click the node to edit in place); the runtime only ever sees the Node ID"
+                onChange={editable ? (v) => set({ label: v || null }) : undefined}
+              />
             </div>
 
             <div className="subsection">

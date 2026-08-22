@@ -483,6 +483,36 @@ body.col-resizing .sidebar-handle {
   display: block;
 }
 
+.ctx-sub.ctx-scroll {
+  max-height: 320px;
+  overflow-y: auto;
+  min-width: 176px;
+}
+
+.ctx-label {
+  max-width: 210px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ctx-rank {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.ctx-empty {
+  padding: 6px 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Runtime id beside a labeled node's name in endpoint checkbox lists. */
+.chk-id {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .node {
   cursor: pointer;
 }
@@ -512,6 +542,31 @@ body.col-resizing .sidebar-handle {
   fill: var(--text);
   opacity: 0.85;
   pointer-events: none;
+}
+
+/* The runtime node id, shown small when a display label covers the face. */
+.node-id-badge {
+  font-size: 9.5px;
+  font-family: Consolas, monospace;
+  fill: var(--text);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* In-place node label editor (double-click a node in build mode). */
+.node-label-editor {
+  position: absolute;
+  z-index: 40;
+  padding: 0 6px;
+  text-align: center;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  outline: none;
+  box-shadow: var(--shadow);
 }
 
 .gen-rect {
@@ -550,6 +605,27 @@ body.col-resizing .sidebar-handle {
 .edge-path.selected {
   stroke: var(--accent);
   stroke-width: 4.2;
+}
+
+/* Dynamic edge connector ('e' on a selected node): a half-opacity edge glued
+ * to the cursor until a target node is clicked. */
+.canvas-holder.linking,
+.canvas-holder.linking .node {
+  cursor: crosshair;
+}
+
+.link-preview-group {
+  pointer-events: none;
+}
+
+.edge-path.link-preview {
+  opacity: 0.5;
+  stroke-dasharray: 9 7;
+}
+
+.link-preview-dot {
+  fill: var(--edge);
+  opacity: 0.5;
 }
 
 .edge-junction {
