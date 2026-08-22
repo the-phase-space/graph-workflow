@@ -121,7 +121,7 @@ export default function Canvas(props: {
     const pad = 70;
     const b = layout.bbox;
     const scale = Math.min(
-      model.nodes.length ? 2.2 : 1.35,
+      1.35,
       Math.min((size.w - pad * 2) / Math.max(1, b.w), (size.h - pad * 2) / Math.max(1, b.h)),
     );
     // The Generator anchors the bottom of every graph, so when the graph is
@@ -134,7 +134,7 @@ export default function Canvas(props: {
       ty: Math.max(tyCentered, tyAnchored),
       scale,
     });
-  }, [layout, size, model.nodes.length]);
+  }, [layout, size]);
 
   // The default viewport shows the whole graph: fit on first layout and
   // whenever the topology or window geometry changes identity.
