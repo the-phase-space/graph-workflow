@@ -55,6 +55,18 @@ async function backend<T>(args: string[], stdin?: string): Promise<T> {
   try {
     return JSON.parse(raw.stdout) as T;
   } catch {
+    // A graph definition may write to stdout out-of-band; recover the
+    // payload from the last parseable JSON line.
+    for (const line of raw.stdout.trim().split(/\r?\n/).reverse()) {
+      const s = line.trim();
+      if (s.startsWith("{")) {
+        try {
+          return JSON.parse(s) as T;
+        } catch {
+          /* keep looking */
+        }
+      }
+    }
     throw new Error(
       `backend ${args[0]} produced no JSON (exit ${raw.code}): ` +
         (raw.stderr || raw.stdout || "no output").slice(0, 800),

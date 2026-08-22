@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { joinPath, listDir, readText, tailText } from "./ipc";
 import {
   GEN,
-  sumUsage,
+  outputTokens,
   type ActivityItem,
   type GraphModel,
   type NodeRuntime,
@@ -103,7 +103,7 @@ function applyEvent(d: RunDerived, ev: TraceEvent) {
         node.writtenOutputs = new Set(Object.keys(ev.outputs ?? {}));
         node.outputState = ev.output_state;
         const m = ev.metrics ?? {};
-        node.tokensCommitted += sumUsage(m.usage);
+        node.tokensCommitted += outputTokens(m.usage);
         node.tokensLive = 0;
         if (typeof m.context_size === "number") node.contextSize = m.context_size;
         if (typeof m.duration_s === "number") node.durationS = m.duration_s;
@@ -169,12 +169,13 @@ function parseStreamLine(obj: any, ts: number | null): { items: ActivityItem[]; 
           ts,
         });
     }
-    const usage = msg.usage;
-    if (usage) liveTokens = sumUsage(usage);
+    // claude's assistant events carry the message-start usage snapshot
+    // (output_tokens ~1-4 regardless of reply length); only the terminal
+    // `result` event reports real output tokens, so no live update here.
     return { items, liveTokens };
   }
   if (type === "result") {
-    if (obj.usage) liveTokens = sumUsage(obj.usage);
+    if (obj.usage) liveTokens = outputTokens(obj.usage);
     items.push({
       kind: "info",
       label: obj.is_error ? "result (error)" : "result",
@@ -213,8 +214,9 @@ function parseStreamLine(obj: any, ts: number | null): { items: ActivityItem[]; 
           ts,
         });
     } else if (method === "thread/tokenUsage/updated") {
-      const last = params.tokenUsage?.last ?? params.tokenUsage?.total ?? params.tokenUsage;
-      if (last) liveTokens = typeof last.totalTokens === "number" ? last.totalTokens : sumUsage(last);
+      // `total` is cumulative across the thread — the live figure we want.
+      const n = outputTokens(params.tokenUsage?.total ?? params.tokenUsage);
+      if (n) liveTokens = n;
     } else if (method === "turn/started") {
       items.push({ kind: "info", label: "turn started", text: "", ts });
     } else if (method === "turn/completed" || method === "turn/failed") {
@@ -235,7 +237,7 @@ function parseStreamLine(obj: any, ts: number | null): { items: ActivityItem[]; 
     const v = obj?.[key];
     if (typeof v === "string" && v) {
       items.push({ kind: "message", label: "assistant", text: v, ts });
-      if (obj.usage) liveTokens = sumUsage(obj.usage);
+      if (obj.usage) liveTokens = outputTokens(obj.usage);
       return { items, liveTokens };
     }
   }

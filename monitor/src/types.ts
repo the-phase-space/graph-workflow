@@ -200,14 +200,23 @@ export function nodeFill(node: Pick<NodeSpec, "type" | "provider">): string {
 
 /** Sum every numeric usage entry whose key mentions tokens — mirrors the
  * runtime's best-effort context-size accounting. */
-export function sumUsage(usage: unknown): number {
+/** Generation tokens only — the "tokens" figure everywhere in the GUI.
+ * Providers spell it differently: claude `output_tokens`, codex app-server
+ * `outputTokens` (sometimes nested under total/last), OpenAI-style
+ * `completion_tokens`. Input and cache traffic are deliberately excluded. */
+export function outputTokens(usage: unknown): number {
   if (!usage || typeof usage !== "object") return 0;
-  let total = 0;
-  for (const [k, v] of Object.entries(usage as Record<string, unknown>)) {
-    if (typeof v === "number" && k.toLowerCase().includes("token")) total += v;
-    else if (v && typeof v === "object") total += sumUsage(v);
+  const u = usage as Record<string, unknown>;
+  for (const k of ["output_tokens", "outputTokens", "completion_tokens", "completionTokens"]) {
+    if (typeof u[k] === "number") return u[k] as number;
   }
-  return total;
+  for (const k of ["total", "last", "tokenUsage", "usage"]) {
+    if (u[k] && typeof u[k] === "object") {
+      const n = outputTokens(u[k]);
+      if (n) return n;
+    }
+  }
+  return 0;
 }
 
 export function fmtTokens(n: number): string {

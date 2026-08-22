@@ -23,6 +23,7 @@ format is refused unless forced.
 from __future__ import annotations
 
 import ast
+import contextlib
 import inspect
 import io
 import json
@@ -104,7 +105,10 @@ def capture(path) -> tuple[Graph, dict]:
     graph_workflow.resume_run = engine.resume_run = _fake_resume
     engine.Runtime.run = _fake_runtime_run
     try:
-        module_ns = runpy.run_path(str(path), run_name="__main__")
+        # The definition executes as __main__, so its own prints fire; stdout
+        # must stay pure JSON for the GUI, so they are diverted to stderr.
+        with contextlib.redirect_stdout(sys.stderr):
+            module_ns = runpy.run_path(str(path), run_name="__main__")
     except _Captured as c:
         return c.graph, c.namespace
     finally:
