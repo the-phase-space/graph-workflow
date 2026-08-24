@@ -19,10 +19,13 @@ export function isDefaultGate(g: GateSpec | undefined | null): boolean {
   return (g.expression ?? "True").trim() === "True" && g.p_invocation == null;
 }
 
-function uniqueId(base: string, taken: Set<string>): string {
-  if (!taken.has(base)) return base;
-  for (let i = 2; ; i++) if (!taken.has(`${base}${i}`)) return `${base}${i}`;
+function numberedId(base: string, taken: Set<string>): string {
+  for (let i = 1; ; i++) if (!taken.has(`${base}${i}`)) return `${base}${i}`;
 }
+
+/** Per-subtype id prefixes. Every subtype must map to a distinct prefix —
+ * never derive from the provider name's first letter (claude/codex collide). */
+const LLM_ID_PREFIX: Record<string, string> = { claude: "LCl", codex: "LCo", grok: "LGr" };
 
 function takenIds(g: GraphModel): Set<string> {
   return new Set([GEN, ...g.nodes.map((n) => n.id), ...g.edges.map((e) => e.id)]);
@@ -57,9 +60,14 @@ export function defaultLabel(g: GraphModel, node: NodeSpec): string {
 
 export function makeNode(g: GraphModel, type: NodeType, provider?: string): NodeSpec {
   const taken = takenIds(g);
+  const p = provider ?? "claude";
   const base =
-    type === "script" ? "S" : type === "human" ? "H" : provider ? provider[0].toUpperCase() : "L";
-  const id = uniqueId(base, taken);
+    type === "script"
+      ? "Scr"
+      : type === "human"
+        ? "Hum"
+        : LLM_ID_PREFIX[p] ?? "L" + p[0].toUpperCase() + p.slice(1, 2).toLowerCase();
+  const id = numberedId(base, taken);
   const common = {
     id,
     rank: nextRank(g),
@@ -105,7 +113,7 @@ export function makeEdge(
 ): EdgeSpec {
   const taken = takenIds(g);
   return normalizeEdgeGates({
-    id: uniqueId("e1", taken),
+    id: numberedId("e", taken),
     inputs,
     outputs,
     universal_gate: { ...DEFAULT_GATE },
