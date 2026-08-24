@@ -27,6 +27,8 @@ export interface NodeSpec {
   type: NodeType;
   /** GUI-owned display name; the runtime only ever sees the node id. */
   label?: string | null;
+  /** GUI-owned manual canvas position (Shift+drag); unset = automatic. */
+  pos?: { x: number; y: number } | null;
   inputs: Record<string, string>;
   outputs: Record<string, string>;
   gate: string | null;

@@ -1,8 +1,9 @@
 // The graph canvas: nearly the whole window. SVG rendering with mouse-drag
 // panning, scroll-wheel zooming, and a fit-to-view control at the top right.
-// The default viewport shows the whole graph. Nodes are not individually
-// movable (layout is automatic); a pan drag may start anywhere, including on
-// top of a node, edge, or the Generator.
+// The default viewport shows the whole graph. Layout is automatic; a pan
+// drag may start anywhere, including on top of a node, edge, or the
+// Generator. In build mode Shift+left-drag moves a node anywhere (nodes may
+// never overlap), and a Reset-layout control clears every manual position.
 
 import {
   useCallback,
@@ -16,6 +17,7 @@ import {
   edgeGeometry,
   GEN_H,
   GEN_W,
+  resolveOverlap,
   type EdgeGeometry,
   type Rect,
 } from "../layout";
@@ -132,9 +134,21 @@ export default function Canvas(props: {
   onAddEdge?: () => void;
   onAddEdgeBetween?: (from: string, to: string) => void;
   onSetLabel?: (id: string, label: string | null) => void;
+  onSetPos?: (id: string, pos: { x: number; y: number }, gesture: number) => void;
+  onResetLayout?: () => void;
 }) {
-  const { model, run, selection, onSelect, onAddNode, onAddEdge, onAddEdgeBetween, onSetLabel } =
-    props;
+  const {
+    model,
+    run,
+    selection,
+    onSelect,
+    onAddNode,
+    onAddEdge,
+    onAddEdgeBetween,
+    onSetLabel,
+    onSetPos,
+    onResetLayout,
+  } = props;
   const holder = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [view, setView] = useState<View>({ tx: 0, ty: 0, scale: 1 });
@@ -148,6 +162,12 @@ export default function Canvas(props: {
   // In-place label editor opened by double-clicking a node.
   const [labelEdit, setLabelEdit] = useState<{ id: string; value: string } | null>(null);
   const drag = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
+  // Shift+drag node movement (build mode): the grab offset keeps the cursor
+  // anchored where it picked the node up; `gesture` groups the whole drag
+  // into one undo step.
+  const nodeDrag = useRef<{ id: string; dx: number; dy: number; gesture: number } | null>(
+    null,
+  );
   const fittedFor = useRef<string>("");
 
   const layout = useMemo(() => computeLayout(model), [model]);
@@ -340,14 +360,57 @@ export default function Canvas(props: {
     if (link && !layout.rects.has(link.from)) setLink(null);
     if (labelEdit && !model.nodes.some((n) => n.id === labelEdit.id)) setLabelEdit(null);
   }, [layout, model, link, labelEdit]);
+  // The global mouse handlers live in a mount-once effect, so current view,
+  // layout, and callbacks are mirrored into refs.
+  const viewRef = useRef(view);
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+  const layoutRef = useRef(layout);
+  useEffect(() => {
+    layoutRef.current = layout;
+  }, [layout]);
+  const onSetPosRef = useRef(onSetPos);
+  useEffect(() => {
+    onSetPosRef.current = onSetPos;
+  }, [onSetPos]);
+
   useEffect(() => {
     const move = (e: MouseEvent) => {
+      const nd = nodeDrag.current;
+      if (nd) {
+        const rect = holder.current?.getBoundingClientRect();
+        const setPos = onSetPosRef.current;
+        const cur = layoutRef.current.rects.get(nd.id);
+        if (!rect || !setPos || !cur) {
+          nodeDrag.current = null;
+          return;
+        }
+        moved.current = true;
+        const v = viewRef.current;
+        // Desired spot comes from the cursor plus the grab offset (never from
+        // the node's current rect), so a blocked update cannot cause drift.
+        const desired = {
+          x: (e.clientX - rect.left - v.tx) / v.scale - nd.dx,
+          y: (e.clientY - rect.top - v.ty) / v.scale - nd.dy,
+          w: cur.w,
+          h: cur.h,
+        };
+        const obstacles: Rect[] = [];
+        for (const [id, r] of layoutRef.current.rects) if (id !== nd.id) obstacles.push(r);
+        const spot = resolveOverlap(desired, obstacles);
+        if (spot) setPos(nd.id, { x: spot.x, y: spot.y }, nd.gesture);
+        return;
+      }
       const d = drag.current;
       if (!d) return;
       if (Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) > 3) moved.current = true;
       setView((v) => ({ ...v, tx: d.tx + (e.clientX - d.x), ty: d.ty + (e.clientY - d.y) }));
     };
-    const up = () => (drag.current = null);
+    const up = () => {
+      drag.current = null;
+      nodeDrag.current = null;
+    };
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
     return () => {
@@ -443,6 +506,31 @@ export default function Canvas(props: {
                 key={n.id}
                 className="node"
                 filter={glow ? `url(#glow-${vs})` : undefined}
+                onMouseDown={
+                  onSetPos
+                    ? (e) => {
+                        // Shift+LClick picks the node up for arbitrary
+                        // placement; a plain press stays a pan.
+                        if (e.button !== 0 || !e.shiftKey || link) return;
+                        const rect = holder.current?.getBoundingClientRect();
+                        if (!rect) return;
+                        e.stopPropagation();
+                        setCtxMenu(null);
+                        setNodeMenu(null);
+                        moved.current = false;
+                        // Deliberately no selection here: opening the
+                        // inspector mid-gesture would resize the canvas and
+                        // re-fit the view under the drag. A motionless
+                        // Shift+click still selects via the click handler.
+                        nodeDrag.current = {
+                          id: n.id,
+                          dx: (e.clientX - rect.left - view.tx) / view.scale - r.x,
+                          dy: (e.clientY - rect.top - view.ty) / view.scale - r.y,
+                          gesture: Date.now(),
+                        };
+                      }
+                    : undefined
+                }
                 onContextMenu={(e) => onElementContextMenu(e, n.id)}
                 onDoubleClick={
                   onSetLabel
@@ -552,6 +640,19 @@ export default function Canvas(props: {
       >
         ⛶
       </button>
+      {onResetLayout && (
+        <button
+          className="reset-layout-btn"
+          title="Return every node to its automatic position"
+          disabled={!model.nodes.some((n) => n.pos)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onResetLayout();
+          }}
+        >
+          Reset layout
+        </button>
+      )}
       {ctxMenu && onAddNode && (
         <div
           ref={menuRef}

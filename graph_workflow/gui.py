@@ -268,8 +268,9 @@ def _extract_section(text: str, begin: str, end: str) -> str | None:
 
 def _gui_meta(contract: dict) -> dict | None:
     """Monitor-only display metadata (node labels, the default-label
-    template) destined for the definition's gw:gui comment section. The
-    runtime never sees any of it: the section is pure comments."""
+    template, manual canvas positions) destined for the definition's gw:gui
+    comment section. The runtime never sees any of it: the section is pure
+    comments."""
     g = contract.get("graph") or {}
     meta: dict = {}
     tmpl = g.get("label_template")
@@ -282,6 +283,15 @@ def _gui_meta(contract: dict) -> dict | None:
     }
     if labels:
         meta["labels"] = labels
+    positions = {}
+    for n in g.get("nodes", []):
+        p = n.get("pos")
+        if isinstance(p, dict):
+            x, y = p.get("x"), p.get("y")
+            if isinstance(x, (int, float)) and isinstance(y, (int, float)):
+                positions[n["id"]] = [round(float(x), 1), round(float(y), 1)]
+    if positions:
+        meta["positions"] = positions
     return meta or None
 
 
@@ -410,6 +420,16 @@ def load_contract(path) -> dict:
                 lab = labels.get(nd["id"])
                 if isinstance(lab, str) and lab.strip():
                     nd["label"] = lab.strip()
+        positions = gui_meta.get("positions")
+        if isinstance(positions, dict):
+            for nd in gmodel["nodes"]:
+                p = positions.get(nd["id"])
+                if (
+                    isinstance(p, (list, tuple))
+                    and len(p) == 2
+                    and all(isinstance(v, (int, float)) for v in p)
+                ):
+                    nd["pos"] = {"x": float(p[0]), "y": float(p[1])}
     return contract
 
 
@@ -592,7 +612,8 @@ def generate(contract: dict) -> str:
         'preserved verbatim and is yours to edit."""'
     )
     # Monitor-only display metadata rides as a comment section the runtime
-    # never parses (node labels, the default-label template).
+    # never parses (node labels, the default-label template, manual canvas
+    # positions).
     meta = _gui_meta(contract)
     gui_section = (
         [_GUI_BEGIN, "# " + json.dumps(meta, ensure_ascii=False), _GUI_END, ""]

@@ -42,7 +42,9 @@ The graph name appears in the window title rather than in a dedicated top bar. N
 
 The default viewport shows the whole graph at whatever zoom level is required. The graph's primary visual flow is bottom-to-top. Cyclic graphs retain that dominant orientation while necessarily routing return edges against it.
 
-The canvas supports mouse-drag panning and scroll-wheel zooming. A fit-to-view control at the top right restores the full-graph view. Nodes are not user-movable.
+The canvas supports mouse-drag panning and scroll-wheel zooming. A fit-to-view control at the top right restores the full-graph view.
+
+Layout is automatic, but in build mode Shift+left-drag moves an individual node to an arbitrary position (for ad-hoc visual grouping while reasoning about a workflow); the sole constraint is that nodes may never overlap. Manual positions persist with the definition in the `gw:gui` section. A `Reset layout` control beside the fit-to-view button returns every node to its automatic position. Both moving and resetting are ordinary build-mode edits: undoable with Ctrl+Z, with a whole drag gesture undoing as one step. In execution mode nodes are not user-movable.
 
 **Selection and property inspection**
 

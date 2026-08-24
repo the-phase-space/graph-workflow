@@ -470,6 +470,35 @@ export default function App() {
     [mutate],
   );
 
+  // Shift+drag node movement: every update within one drag gesture coalesces
+  // into a single undo step.
+  const doSetPos = useCallback(
+    (id: string, pos: { x: number; y: number }, gesture: number) =>
+      mutate(
+        (c) => ({
+          ...c,
+          graph: {
+            ...c.graph,
+            nodes: c.graph.nodes.map((n) => (n.id === id ? { ...n, pos } : n)),
+          },
+        }),
+        `move:${id}:${gesture}`,
+      ),
+    [mutate],
+  );
+
+  const doResetLayout = useCallback(
+    () =>
+      mutate((c) => ({
+        ...c,
+        graph: {
+          ...c.graph,
+          nodes: c.graph.nodes.map((n) => (n.pos ? { ...n, pos: null } : n)),
+        },
+      })),
+    [mutate],
+  );
+
   const doAttach = useCallback(async () => {
     const picked = await openDialog({ directory: true, multiple: false });
     if (typeof picked === "string") {
@@ -598,6 +627,8 @@ export default function App() {
             onAddEdge={editable ? doAddEdge : undefined}
             onAddEdgeBetween={editable ? doAddEdgeBetween : undefined}
             onSetLabel={editable ? doSetLabel : undefined}
+            onSetPos={editable ? doSetPos : undefined}
+            onResetLayout={editable ? doResetLayout : undefined}
           />
         ) : mode === "exec" ? (
           <div className="welcome">

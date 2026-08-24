@@ -1,7 +1,8 @@
 // Automatic graph layout: layered, bottom-to-top (the Generator at the
-// bottom, primary flow upward). Nodes are not user-movable; cyclic graphs
-// keep the dominant orientation with return edges routed against it around
-// the side.
+// bottom, primary flow upward). Cyclic graphs keep the dominant orientation
+// with return edges routed against it around the side. A node the user has
+// moved by hand (Shift+drag, build mode) carries a stored position that
+// overrides its automatic slot; everything else stays automatic.
 
 import { GEN, type EdgeSpec, type GraphModel } from "./types";
 
@@ -144,6 +145,16 @@ export function computeLayout(model: GraphModel): Layout {
     }
   }
 
+  // Manual overrides win over the automatic slots (and count toward the
+  // bbox, so fit-to-view and return-edge routing follow moved nodes).
+  for (const n of model.nodes) {
+    const p = n.pos;
+    if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
+      const r = rects.get(n.id);
+      if (r) rects.set(n.id, { ...r, x: p.x, y: p.y });
+    }
+  }
+
   let minX = Infinity,
     minY = Infinity,
     maxX = -Infinity,
@@ -163,6 +174,40 @@ export function computeLayout(model: GraphModel): Layout {
     bbox: { x: minX, y: minY, w: maxX - minX, h: maxY - minY },
     maxLayer,
   };
+}
+
+/** Slide a dragged rect out of every obstacle it overlaps: push along the
+ * axis of least penetration, iterating a few times so corners and clusters
+ * resolve; null when no overlap-free spot emerges (caller keeps the last
+ * good position). */
+export function resolveOverlap(
+  desired: Rect,
+  obstacles: Rect[],
+  margin = 8,
+): Rect | null {
+  const r = { ...desired };
+  for (let iter = 0; iter < 8; iter++) {
+    let hit = false;
+    for (const o of obstacles) {
+      const x1 = o.x - margin;
+      const y1 = o.y - margin;
+      const x2 = o.x + o.w + margin;
+      const y2 = o.y + o.h + margin;
+      const pushRight = x2 - r.x;
+      const pushLeft = r.x + r.w - x1;
+      const pushDown = y2 - r.y;
+      const pushUp = r.y + r.h - y1;
+      if (pushRight <= 0 || pushLeft <= 0 || pushDown <= 0 || pushUp <= 0) continue;
+      hit = true;
+      const m = Math.min(pushRight, pushLeft, pushDown, pushUp);
+      if (m === pushRight) r.x = x2;
+      else if (m === pushLeft) r.x = x1 - r.w;
+      else if (m === pushDown) r.y = y2;
+      else r.y = y1 - r.h;
+    }
+    if (!hit) return r;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------- //
