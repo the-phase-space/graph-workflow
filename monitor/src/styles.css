@@ -32,7 +32,7 @@
   --panel-2: #2a2e36;
   --text: #e8eaed;
   --muted: #9aa2ad;
-  --label: #bebebe;
+  --label: #b8b8b8;
   --border: #3a3f48;
   --accent: #4d8dff;
   --edge: #f2f3f5;
@@ -157,6 +157,17 @@ kbd {
 /* Sidebar                                                             */
 /* ------------------------------------------------------------------ */
 
+/* Chrome text on both sidebars (labels, buttons, static text) is the muted
+   label gray; text typed into inputs/textareas keeps the brighter --text /
+   white via those elements' own rules. Specially colored buttons (pause,
+   stop, delete) opt back out with button.<class> selectors below. */
+.sidebar,
+.dialog,
+.sidebar button,
+.dialog button {
+  color: var(--label);
+}
+
 .sidebar {
   position: relative;
   width: 202px;
@@ -242,10 +253,14 @@ body.col-resizing .sidebar-handle {
 
 .btn-grid {
   display: grid;
-  /* Two columns normally; collapses to one when the sidebar is dragged
-     narrow enough that paired buttons would overflow. */
-  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  /* Two columns at most; Sidebar.tsx adds .one-col when a button label
+     would no longer fit on a single line at half width. */
+  grid-template-columns: 1fr 1fr;
   gap: 5px;
+}
+
+.btn-grid.one-col {
+  grid-template-columns: 1fr;
 }
 
 .btn-row {
@@ -271,7 +286,8 @@ body.col-resizing .sidebar-handle {
 }
 
 .seed-row label {
-  color: var(--muted);
+  color: var(--label);
+  font-weight: 700;
 }
 
 .run-btn {
@@ -285,8 +301,9 @@ body.col-resizing .sidebar-handle {
   padding-right: 4px;
 }
 
-/* Orderly pause: prominent, green-ish, with the pause symbol. */
-.pause-btn {
+/* Orderly pause: prominent, green-ish, with the pause symbol. (button.<class>
+   so the white/red text beats the sidebar-wide label-gray button rule.) */
+button.pause-btn {
   background: #2e9e5b;
   border-color: #2e9e5b;
   color: #fff;
@@ -305,7 +322,7 @@ body.col-resizing .sidebar-handle {
 }
 
 /* Immediate stop: red, slightly smaller, below Pause. */
-.stop-btn {
+button.stop-btn {
   background: #d5382f;
   border-color: #d5382f;
   color: #fff;
@@ -996,6 +1013,13 @@ body.col-resizing * {
   font-size: 11px;
 }
 
+/* Run content (captured outputs, session activity) stays full-brightness
+   even though the surrounding inspector chrome is label-gray. */
+.output-preview pre,
+.act-text {
+  color: var(--text);
+}
+
 .output-preview pre {
   margin: 3px 0 0;
   max-height: 130px;
@@ -1006,9 +1030,10 @@ body.col-resizing * {
   font-size: 11.5px;
 }
 
-.danger-btn {
+button.danger-btn {
   border-color: #d5382f;
   color: #d5382f;
+  font-weight: 700;
   align-self: flex-start;
 }
 

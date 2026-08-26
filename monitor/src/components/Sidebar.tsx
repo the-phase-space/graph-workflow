@@ -2,7 +2,7 @@
 // validator, graph-level statistics, and the run controls (orderly Pause /
 // Resume above a smaller, immediate red Stop).
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { totalTokens, visualState, type RunState } from "../runstate";
 import { fmtDuration, fmtTokens, type GraphModel, type Selection } from "../types";
 
@@ -23,7 +23,6 @@ export default function Sidebar(props: {
   mode: "build" | "exec";
   model: GraphModel | null;
   run: RunState | null;
-  dirty: boolean;
   path: string | null;
   canBuild: boolean;
   validation: ValidationReport | null;
@@ -56,6 +55,32 @@ export default function Sidebar(props: {
   const elRef = useRef<HTMLDivElement>(null);
   const resizing = useRef(false);
   const { mode, run } = props;
+
+  // The add-node/edge grid is two columns only when every button label fits
+  // on a single line at half the grid's width (measured against the rendered
+  // font); below that it stacks in one column. Never more than two columns.
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [gridTwoCol, setGridTwoCol] = useState(true);
+  useLayoutEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const btns = Array.from(el.querySelectorAll("button"));
+    if (btns.length === 0) return;
+    const cs = getComputedStyle(btns[0]);
+    const ctx = document.createElement("canvas").getContext("2d");
+    if (!ctx) return;
+    ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const chrome =
+      parseFloat(cs.paddingLeft) +
+      parseFloat(cs.paddingRight) +
+      parseFloat(cs.borderLeftWidth) +
+      parseFloat(cs.borderRightWidth);
+    const need =
+      Math.max(...btns.map((b) => ctx.measureText(b.textContent ?? "").width)) +
+      chrome;
+    const gap = parseFloat(getComputedStyle(el).columnGap) || 0;
+    setGridTwoCol((el.clientWidth - gap) / 2 >= need + 1);
+  }, [width, minimized, props.model]);
 
   const startResize = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -177,12 +202,11 @@ export default function Sidebar(props: {
       {mode === "build" && (
         <>
           <div className="section">
-            <div className="section-title">Graph definition</div>
             <div className="btn-col">
               <button onClick={props.onNew}>New</button>
-              <button onClick={props.onOpen}>Open…</button>
+              <button onClick={props.onOpen}>Open</button>
               <button onClick={props.onSave} disabled={!props.model}>
-                Save{props.dirty ? " •" : ""} <kbd>Ctrl+S</kbd>
+                Save
               </button>
               <button onClick={props.onSaveAs} disabled={!props.model}>
                 Save As…
@@ -196,14 +220,18 @@ export default function Sidebar(props: {
 
           {props.model && (
             <div className="section">
-              <div className="section-title">Compose</div>
-              <div className="btn-grid">
+              <div
+                className={"btn-grid" + (gridTwoCol ? "" : " one-col")}
+                ref={gridRef}
+              >
+                {/* DOM order is row-major for the two-column grid: columns
+                    read Script/Human/Edge and Claude/Codex/Grok. */}
                 <button onClick={() => props.onAddNode("script")}>+ Script</button>
-                <button onClick={() => props.onAddNode("human")}>+ Human</button>
                 <button onClick={() => props.onAddNode("claude")}>+ Claude</button>
+                <button onClick={() => props.onAddNode("human")}>+ Human</button>
                 <button onClick={() => props.onAddNode("codex")}>+ Codex</button>
-                <button onClick={() => props.onAddNode("grok")}>+ Grok</button>
                 <button onClick={props.onAddEdge}>+ Edge</button>
+                <button onClick={() => props.onAddNode("grok")}>+ Grok</button>
               </div>
               <div className="btn-col">
                 <button onClick={() => props.onSelect({ kind: "graph", id: "graph" })}>
@@ -214,7 +242,6 @@ export default function Sidebar(props: {
           )}
 
           <div className="section">
-            <div className="section-title">Execute</div>
             <div className="seed-row">
               <label>Seed</label>
               <input

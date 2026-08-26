@@ -366,7 +366,9 @@ export default function App() {
       const k = e.key.toLowerCase();
       if (k === "s") {
         e.preventDefault();
-        if (mode === "build") void doSave();
+        if (mode !== "build") return;
+        if (e.shiftKey) void doSaveAs();
+        else void doSave();
       } else if (k === "z" && !e.shiftKey) {
         if (mode !== "build") return;
         e.preventDefault();
@@ -379,7 +381,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [mode, doSave, undo, redo]);
+  }, [mode, doSave, doSaveAs, undo, redo]);
 
   const doValidate = useCallback(async () => {
     if (!contract) return;
@@ -591,7 +593,6 @@ export default function App() {
         mode={mode === "exec" ? "exec" : "build"}
         model={model}
         run={mode === "exec" ? run : null}
-        dirty={dirty}
         path={contract?.path ?? null}
         canBuild={!!contract}
         validation={validation}
