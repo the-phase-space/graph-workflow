@@ -4,6 +4,7 @@
 // checkbox.
 
 import { useEffect, useRef, useState } from "react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { nodeLiveTokens, type RunState } from "../runstate";
 import {
   EFFORTS,
@@ -42,6 +43,15 @@ export default function NodeDialog(props: {
 
   const set = (patch: Partial<NodeSpec>) => props.onChange({ ...node, ...patch });
   const ro = !editable;
+
+  const pickFile = async () => {
+    const p = await openDialog({ multiple: false });
+    return typeof p === "string" ? p : null;
+  };
+  const pickDir = async () => {
+    const p = await openDialog({ directory: true, multiple: false });
+    return typeof p === "string" ? p : null;
+  };
 
   const models = PROVIDER_MODELS[node.provider ?? ""] ?? [];
   const knownModel = models.some((m) => m.id === node.model);
@@ -94,8 +104,7 @@ export default function NodeDialog(props: {
             )}
 
             <div className="subsection">
-              <div className="section-title">Identity</div>
-              <FieldRow cols="2-1">
+              <FieldRow cols="2-1-2">
                 <TextField
                   label="Node ID"
                   value={node.id}
@@ -115,36 +124,31 @@ export default function NodeDialog(props: {
                   }
                   hint="Unique; scheduling proceeds by rank"
                 />
+                <TextField
+                  label="Label"
+                  value={node.label ?? ""}
+                  readOnly={ro}
+                  placeholder={node.id}
+                  hint="Display name on the canvas (double-click the node to edit in place); the runtime only ever sees the Node ID"
+                  onChange={editable ? (v) => set({ label: v || null }) : undefined}
+                />
               </FieldRow>
-              <TextField
-                label="Label"
-                value={node.label ?? ""}
-                readOnly={ro}
-                placeholder={node.id}
-                hint="Display name on the canvas (double-click the node to edit in place); the runtime only ever sees the Node ID"
-                onChange={editable ? (v) => set({ label: v || null }) : undefined}
-              />
             </div>
 
             <div className="subsection">
-              <div className="section-title">Expressions</div>
+              <IoEditor
+                label="Declared inputs"
+                entries={node.inputs}
+                marked={received}
+                onChange={editable ? (v) => set({ inputs: v }) : undefined}
+              />
               <AreaField
                 label="Gating expression"
                 value={node.gate ?? ""}
-                rows={6}
+                rows={4}
                 placeholder="default: AND of all in-edge terms"
                 readOnly={ro}
                 onChange={editable ? (v) => set({ gate: v || null }) : undefined}
-              />
-              <AreaField
-                label="Output expression"
-                value={node.output_expression ?? ""}
-                rows={3}
-                placeholder="default: isDefined() over every declared output"
-                readOnly={ro}
-                onChange={
-                  editable ? (v) => set({ output_expression: v || null }) : undefined
-                }
               />
             </div>
 
@@ -227,6 +231,7 @@ export default function NodeDialog(props: {
                           set({ prompt: v === "" && node.prompt_ref ? null : v })
                       : undefined
                   }
+                  onBrowse={editable ? pickFile : undefined}
                 />
                 {node.prompt_ref && editable && (
                   <div className="hint-text">
@@ -250,6 +255,7 @@ export default function NodeDialog(props: {
                   readOnly={ro}
                   hint="Hook/settings file passed to the CLI (tool permissions live here)"
                   onChange={editable ? (v) => set({ settings: v || null }) : undefined}
+                  onBrowse={editable ? pickFile : undefined}
                 />
                 <TextField
                   label="Working directory"
@@ -257,6 +263,7 @@ export default function NodeDialog(props: {
                   mono
                   readOnly={ro}
                   onChange={editable ? (v) => set({ cwd: v || null }) : undefined}
+                  onBrowse={editable ? pickDir : undefined}
                 />
                 <FieldRow cols="2-1">
                   <TextField
@@ -387,12 +394,15 @@ export default function NodeDialog(props: {
             )}
 
             <div className="subsection">
-              <div className="section-title">Data plane</div>
-              <IoEditor
-                label="Declared inputs"
-                entries={node.inputs}
-                marked={received}
-                onChange={editable ? (v) => set({ inputs: v }) : undefined}
+              <AreaField
+                label="Output expression"
+                value={node.output_expression ?? ""}
+                rows={4}
+                placeholder="default: isDefined() over every declared output"
+                readOnly={ro}
+                onChange={
+                  editable ? (v) => set({ output_expression: v || null }) : undefined
+                }
               />
               <IoEditor
                 label="Declared outputs"

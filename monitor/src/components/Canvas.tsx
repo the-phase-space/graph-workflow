@@ -1,13 +1,15 @@
 // The graph canvas: nearly the whole window. SVG rendering with mouse-drag
-// panning, scroll-wheel zooming, and a fit-to-view control at the top right.
-// The default viewport shows the whole graph. Layout is automatic; a pan
-// drag may start anywhere, including on top of a node, edge, or the
-// Generator. In build mode Shift+left-drag moves a node anywhere (nodes may
-// never overlap), and a Reset-layout control clears every manual position.
+// panning, scroll-wheel (or Ctrl+plus/minus) zooming, and a fit-to-view
+// control at the top right. The default viewport shows the whole graph.
+// Layout is automatic; a pan drag may start anywhere, including on top of a
+// node, edge, or the Generator. In build mode Shift+left-drag moves a node
+// anywhere (nodes may never overlap), and a Reset-layout control clears
+// every manual position.
 
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -150,7 +152,7 @@ export default function Canvas(props: {
     onResetLayout,
   } = props;
   const holder = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ w: 800, h: 600 });
+  const [size, setSize] = useState({ w: 0, h: 0 });
   const [view, setView] = useState<View>({ tx: 0, ty: 0, scale: 1 });
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   // Right-click menu on a node or the Generator ("Add edge to ▸").
@@ -179,7 +181,7 @@ export default function Canvas(props: {
     [model, layout],
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = holder.current;
     if (!el) return;
     const ro = new ResizeObserver(() => {
@@ -209,10 +211,13 @@ export default function Canvas(props: {
     });
   }, [layout, size]);
 
-  // The default viewport shows the whole graph: fit on first layout and
-  // whenever the topology or window geometry changes identity.
+  // The default viewport shows the whole graph: fit when a graph first
+  // arrives (once the holder has real dimensions) or its topology changes
+  // identity. Never on geometry changes — the view must hold still through
+  // window and inspector resizes; zoom belongs to the user alone.
   useEffect(() => {
-    const key = `${model.name}|${model.nodes.length}|${model.edges.length}|${size.w}x${size.h}`;
+    if (!size.w || !size.h) return;
+    const key = `${model.name}|${model.nodes.length}|${model.edges.length}`;
     if (fittedFor.current !== key) {
       fittedFor.current = key;
       fit();
@@ -232,6 +237,26 @@ export default function Canvas(props: {
       return { scale, tx: mx - (mx - v.tx) * k, ty: my - (my - v.ty) * k };
     });
   };
+
+  // Ctrl+plus / Ctrl+minus step the zoom about the viewport center (and are
+  // intercepted before the webview can zoom its own page).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      if (e.key !== "+" && e.key !== "=" && e.key !== "-") return;
+      e.preventDefault();
+      const factor = e.key === "-" ? 1 / 1.2 : 1.2;
+      setView((v) => {
+        const scale = Math.min(4, Math.max(0.05, v.scale * factor));
+        const k = scale / v.scale;
+        const cx = size.w / 2;
+        const cy = size.h / 2;
+        return { scale, tx: cx - (cx - v.tx) * k, ty: cy - (cy - v.ty) * k };
+      });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [size]);
 
   const moved = useRef(false);
   const onMouseDown = (e: React.MouseEvent) => {
@@ -458,14 +483,11 @@ export default function Canvas(props: {
       onMouseMove={link ? onLinkMouseMove : undefined}
       onContextMenu={onContextMenu}
       onClick={() => {
-        // Clicking empty canvas minimizes the inspector; a pan drag that ends
-        // over the canvas still emits a click, so suppress those.
+        // Clicking empty canvas abandons an active edge connector, nothing
+        // more: the selection (and with it the inspector) stays put until
+        // another element is clicked or the panel is minimized explicitly.
         if (moved.current) return;
-        if (link) {
-          setLink(null);
-          return;
-        }
-        guardedSelect(null);
+        if (link) setLink(null);
       }}
     >
       <svg width={size.w} height={size.h} className="canvas-svg">
@@ -519,9 +541,9 @@ export default function Canvas(props: {
                         setNodeMenu(null);
                         moved.current = false;
                         // Deliberately no selection here: opening the
-                        // inspector mid-gesture would resize the canvas and
-                        // re-fit the view under the drag. A motionless
-                        // Shift+click still selects via the click handler.
+                        // inspector mid-gesture would resize the canvas
+                        // under the drag. A motionless Shift+click still
+                        // selects via the click handler.
                         nodeDrag.current = {
                           id: n.id,
                           dx: (e.clientX - rect.left - view.tx) / view.scale - r.x,
