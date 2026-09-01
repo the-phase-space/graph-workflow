@@ -1,10 +1,16 @@
-Node_ID must not follow the same pattern as the label. MUST NOT. Fix in "guide" material?? We end up with names like "Fable_max_right" and "Fable_max_top".
-
 GUI: callable prompts (prompt_ref -> named helper def) render as an empty prompt field plus a "produced by helper <name>" pointer into the helpers view. Should be more intuitive to read and access than it currently is -- e.g. show the helper's source (or a rendered preview per branch) inline on the node inspector instead of making you jump to helpers.
 
 Show thinking outputs in Activity sidebar (involves passing --thinking-display summarized) which checkbox to enable/disable.
 
+GUI: shift+click node moving not working as robustly as it should >:( 
+
+% GUI: back-edge routing in dense graphs -- React Flow sends a short cycle's return edge (e.g. AUD->RGN, two nodes one rank apart) on an enormous loop out past the far edge of the whole layout instead of a tight local curve. Figure out whether the edge router can be constrained/replaced for cycles.
+
 Activity sidebar shows phantom USER messages mid-session (e.g. "[Image: original 2068x1969, displayed at 2000x1904. Multiply coordinates by 1.03 to map to original image.]" attributed to USER) -- likely the session JSONL/trace being parsed wrong: tool results or image-attachment metadata inside an assistant turn getting classified as user messages. Screenshot: bugs\activity-phantom-user-message.png
+
+% graph layout options and persistence independent of graph defs (GUI-only settings files attached to graph-definitions by absolute filepath?)
+
+remove minimum window size for GUI? (at least should be smaller than it is)
 
 
 
