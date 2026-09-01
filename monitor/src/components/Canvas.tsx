@@ -136,7 +136,7 @@ export default function Canvas(props: {
   onAddEdge?: () => void;
   onAddEdgeBetween?: (from: string, to: string) => void;
   onSetLabel?: (id: string, label: string | null) => void;
-  onSetPos?: (id: string, pos: { x: number; y: number }, gesture: number) => void;
+  onSetPos?: (id: string, pos: { x: number; y: number }) => void;
   onResetLayout?: () => void;
 }) {
   const {
@@ -165,11 +165,8 @@ export default function Canvas(props: {
   const [labelEdit, setLabelEdit] = useState<{ id: string; value: string } | null>(null);
   const drag = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
   // Shift+drag node movement (build mode): the grab offset keeps the cursor
-  // anchored where it picked the node up; `gesture` groups the whole drag
-  // into one undo step.
-  const nodeDrag = useRef<{ id: string; dx: number; dy: number; gesture: number } | null>(
-    null,
-  );
+  // anchored where it picked the node up.
+  const nodeDrag = useRef<{ id: string; dx: number; dy: number } | null>(null);
   const fittedFor = useRef<string>("");
 
   const layout = useMemo(() => computeLayout(model), [model]);
@@ -424,7 +421,7 @@ export default function Canvas(props: {
         const obstacles: Rect[] = [];
         for (const [id, r] of layoutRef.current.rects) if (id !== nd.id) obstacles.push(r);
         const spot = resolveOverlap(desired, obstacles);
-        if (spot) setPos(nd.id, { x: spot.x, y: spot.y }, nd.gesture);
+        if (spot) setPos(nd.id, { x: spot.x, y: spot.y });
         return;
       }
       const d = drag.current;
@@ -548,7 +545,6 @@ export default function Canvas(props: {
                           id: n.id,
                           dx: (e.clientX - rect.left - view.tx) / view.scale - r.x,
                           dy: (e.clientY - rect.top - view.ty) / view.scale - r.y,
-                          gesture: Date.now(),
                         };
                       }
                     : undefined

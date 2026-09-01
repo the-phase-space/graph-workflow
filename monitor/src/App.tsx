@@ -143,6 +143,11 @@ export default function App() {
     lastEditRef.current = null;
   }, []);
 
+  // Manual node positions are session-only view state: they overlay the
+  // displayed canvas but never enter the contract, the undo history, the
+  // dirty flag, or the saved definition.
+  const [nodePos, setNodePos] = useState<Record<string, { x: number; y: number }>>({});
+
   // -- opening / attaching ------------------------------------------------ //
 
   const openPath = useCallback(
@@ -156,6 +161,7 @@ export default function App() {
         }
         setContract(result);
         resetHistory();
+        setNodePos({});
         setDirty(false);
         setSelection(null);
         setRunDir(null);
@@ -291,6 +297,7 @@ export default function App() {
     }
     setContract(result);
     resetHistory();
+    setNodePos({});
     setDirty(true);
     setRunDir(null);
     setSelection(null);
@@ -472,34 +479,15 @@ export default function App() {
     [mutate],
   );
 
-  // Shift+drag node movement: every update within one drag gesture coalesces
-  // into a single undo step.
+  // Shift+drag node movement: view-only, so no mutate() — a move is not an
+  // edit to the graph definition.
   const doSetPos = useCallback(
-    (id: string, pos: { x: number; y: number }, gesture: number) =>
-      mutate(
-        (c) => ({
-          ...c,
-          graph: {
-            ...c.graph,
-            nodes: c.graph.nodes.map((n) => (n.id === id ? { ...n, pos } : n)),
-          },
-        }),
-        `move:${id}:${gesture}`,
-      ),
-    [mutate],
+    (id: string, pos: { x: number; y: number }) =>
+      setNodePos((m) => ({ ...m, [id]: pos })),
+    [],
   );
 
-  const doResetLayout = useCallback(
-    () =>
-      mutate((c) => ({
-        ...c,
-        graph: {
-          ...c.graph,
-          nodes: c.graph.nodes.map((n) => (n.pos ? { ...n, pos: null } : n)),
-        },
-      })),
-    [mutate],
-  );
+  const doResetLayout = useCallback(() => setNodePos({}), []);
 
   const doAttach = useCallback(async () => {
     const picked = await openDialog({ directory: true, multiple: false });
@@ -514,6 +502,20 @@ export default function App() {
   const model = mode === "exec" ? execModel : contract?.graph ?? null;
   const editable = mode === "build";
   const helpers = contract?.helpers ?? "";
+
+  // The canvas sees the session's manual positions overlaid; everything else
+  // (inspector, sidebar, save) works off the position-free model.
+  const canvasModel = useMemo(() => {
+    if (!model) return null;
+    let moved = false;
+    const nodes = model.nodes.map((n) => {
+      const p = nodePos[n.id];
+      if (!p) return n;
+      moved = true;
+      return { ...n, pos: p };
+    });
+    return moved ? { ...model, nodes } : model;
+  }, [model, nodePos]);
 
   const selectedNode: NodeSpec | null = useMemo(() => {
     if (!model || selection?.kind !== "node") return null;
@@ -618,9 +620,9 @@ export default function App() {
       />
 
       <div className="main" ref={mainRef}>
-        {model ? (
+        {canvasModel ? (
           <Canvas
-            model={model}
+            model={canvasModel}
             run={mode === "exec" ? run : null}
             selection={selection}
             onSelect={setSelection}

@@ -27,7 +27,11 @@ export interface NodeSpec {
   type: NodeType;
   /** GUI-owned display name; the runtime only ever sees the node id. */
   label?: string | null;
-  /** GUI-owned manual canvas position (Shift+drag); unset = automatic. */
+  /**
+   * Manual canvas position (Shift+drag); unset = automatic. Session-only
+   * view state, overlaid onto the canvas model just before render — never
+   * present on the contract and never persisted.
+   */
   pos?: { x: number; y: number } | null;
   inputs: Record<string, string>;
   outputs: Record<string, string>;
