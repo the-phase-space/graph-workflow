@@ -153,6 +153,12 @@ class CodexAppServerInvocation:
                     continue
                 method = msg.get("method", "")
                 params = msg.get("params") or {}
+                # Subagents spawned by the turn run their own turns on
+                # separate threads over this same connection; only the
+                # node's own thread drives the turn lifecycle here.
+                tid = params.get("threadId")
+                if tid and self.thread_id and tid != self.thread_id:
+                    continue
                 if method == "turn/started":
                     turn = params.get("turn") or {}
                     if turn.get("id") and self.turn_id is None:
@@ -160,6 +166,9 @@ class CodexAppServerInvocation:
                     self._turn_started.set()
                 elif method in ("turn/completed", "turn/failed"):
                     turn = params.get("turn") or {}
+                    if self.turn_id and turn.get("id") and \
+                            turn["id"] != self.turn_id:
+                        continue
                     self._turn_status = turn.get("status") or (
                         "completed" if method == "turn/completed" else "failed"
                     )
@@ -330,6 +339,10 @@ class CodexAdapter(ProviderAdapter):
         messages: list[tuple[str, str]] = []  # (text, phase)
         failure: str | None = None
         events = []
+        # The node's own app-server thread: the ``thread/start`` response's
+        # id, else the first turn started (subagent turns on other threads
+        # over the same connection can only begin after the node's own).
+        main_thread: str | None = None
         for line in stdout.splitlines():
             line = line.strip()
             if not line.startswith("{"):
@@ -342,6 +355,11 @@ class CodexAdapter(ProviderAdapter):
             method = obj.get("method")
             if method is not None:  # app-server notification
                 params = obj.get("params") or {}
+                tid = params.get("threadId")
+                if method == "turn/started" and main_thread is None:
+                    main_thread = tid
+                if tid and main_thread and tid != main_thread:
+                    continue  # subagent-thread traffic, not the node's turn
                 if method == "item/completed":
                     item = params.get("item") or {}
                     if item.get("type") == "agentMessage":
@@ -366,6 +384,8 @@ class CodexAdapter(ProviderAdapter):
                 thread = obj["result"].get("thread")
                 if isinstance(thread, dict) and thread.get("id"):
                     r.session_id = thread["id"]
+                    if main_thread is None:
+                        main_thread = thread["id"]
                 continue
             etype = obj.get("type", "")
             if etype == "thread.started":
