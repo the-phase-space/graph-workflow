@@ -24,7 +24,7 @@ import subprocess
 import threading
 import time
 
-from .base import InvocationPlan, InvocationResult, ProviderAdapter, kill_tree
+from .base import CREATIONFLAGS, InvocationPlan, InvocationResult, ProviderAdapter, kill_tree
 
 #: Parity with ``exec --dangerously-bypass-approvals-and-sandbox``.
 _THREAD_POLICY = {"approvalPolicy": "never", "sandbox": "danger-full-access"}
@@ -82,6 +82,7 @@ class CodexAppServerInvocation:
             errors="replace",
             env=adapter.build_env(),
             cwd=cwd,
+            creationflags=CREATIONFLAGS,
         )
         self._t_out = threading.Thread(target=self._read_stdout, daemon=True)
         self._t_err = threading.Thread(target=self._read_stderr, daemon=True)

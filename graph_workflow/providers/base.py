@@ -23,6 +23,12 @@ from ..errors import GraphDefinitionError
 #: Stripped from every LLM node's environment regardless of provider.
 COMMON_ENV_STRIP = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "XAI_API_KEY")
 
+#: Windows: every child gets its own hidden console. Sharing the launching
+#: console exposes children to its Ctrl events; a console-less parent (GUI
+#: launch) would otherwise pop a visible terminal window per invocation whose
+#: close button kills the session.
+CREATIONFLAGS = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+
 
 @dataclass
 class InvocationResult:
@@ -136,6 +142,7 @@ class LiveInvocation:
             errors="replace",
             env=env,
             cwd=cwd,
+            creationflags=CREATIONFLAGS,
         )
         self._t_out = threading.Thread(target=self._read_stdout, daemon=True)
         self._t_err = threading.Thread(target=self._read_stderr, daemon=True)
@@ -244,6 +251,7 @@ def kill_tree(pid: int):
             ["taskkill", "/F", "/T", "/PID", str(pid)],
             capture_output=True,
             check=False,
+            creationflags=CREATIONFLAGS,
         )
     else:
         try:
@@ -279,6 +287,7 @@ def invoke(
         errors="replace",
         env=env,
         cwd=cwd,
+        creationflags=CREATIONFLAGS,
     )
     if on_proc is not None:
         on_proc(proc)

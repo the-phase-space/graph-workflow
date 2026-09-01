@@ -1,0 +1,13 @@
+Node_ID must not follow the same pattern as the label. MUST NOT. Fix in "guide" material?? We end up with names like "Fable_max_right" and "Fable_max_top".
+
+GUI: callable prompts (prompt_ref -> named helper def) render as an empty prompt field plus a "produced by helper <name>" pointer into the helpers view. Should be more intuitive to read and access than it currently is -- e.g. show the helper's source (or a rendered preview per branch) inline on the node inspector instead of making you jump to helpers.
+
+Show thinking outputs in Activity sidebar (involves passing --thinking-display summarized) which checkbox to enable/disable.
+
+Activity sidebar shows phantom USER messages mid-session (e.g. "[Image: original 2068x1969, displayed at 2000x1904. Multiply coordinates by 1.03 to map to original image.]" attributed to USER) -- likely the session JSONL/trace being parsed wrong: tool results or image-attachment metadata inside an assistant turn getting classified as user messages. Screenshot: bugs\activity-phantom-user-message.png
+
+
+
+
+
+
