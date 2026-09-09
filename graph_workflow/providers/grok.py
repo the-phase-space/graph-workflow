@@ -13,6 +13,7 @@ _EFFORT_MAP = {"max": "xhigh"}
 class GrokAdapter(ProviderAdapter):
     name = "grok"
     executable = "grok"
+    config_var = "GROK_HOME"
     needs_prompt_file = True
     # Headless grok (--prompt-file single-turn) exposes no stdin steering
     # channel; Pause falls back to interrupt + halt-via-resume.

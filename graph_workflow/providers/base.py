@@ -3,9 +3,13 @@ control.
 
 LLM nodes shell out to their provider CLIs. Provider API-key environment
 variables are stripped so an invocation can never fall through to a direct
-API request. Each headless command exits after one response; sessions persist
-provider-side and are re-entered with the resume form bound to the retained
-session ID.
+API request. The CLIs' config-dir variables are stripped too and set from the
+node's provider alone: ``claude``/``codex`` are the CLI's default login,
+``claudeb``/``codexb`` the same CLI on its second config dir (``~/.claudeb``,
+``~/.codexb``), so which account a node spends is a property of the
+definition, never of the shell that launched it. Each headless command exits
+after one response; sessions persist provider-side and are re-entered with
+the resume form bound to the retained session ID.
 """
 
 from __future__ import annotations
@@ -22,6 +26,11 @@ from ..errors import GraphDefinitionError
 
 #: Stripped from every LLM node's environment regardless of provider.
 COMMON_ENV_STRIP = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "XAI_API_KEY")
+
+#: Config-dir variables of every CLI, stripped from every LLM node's
+#: environment: the login is chosen by the adapter (``config_var`` /
+#: ``config_dir``), never inherited from the launching process.
+CONFIG_DIR_VARS = ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "GROK_HOME")
 
 #: Windows: every child gets its own hidden console. Sharing the launching
 #: console exposes children to its Ctrl events; a console-less parent (GUI
@@ -47,6 +56,11 @@ class ProviderAdapter:
     extra_env_strip: tuple[str, ...] = ()
     #: True if the CLI takes its prompt from a file path instead of stdin.
     needs_prompt_file: bool = False
+    #: Env var the CLI reads its config dir (= login) from.
+    config_var: str | None = None
+    #: Home-relative config dir to point ``config_var`` at; None = the CLI's
+    #: default dir, reached by leaving the variable unset.
+    config_dir: str | None = None
 
     _resolved_exe: str | None = None
 
@@ -60,9 +74,24 @@ class ProviderAdapter:
             type(self)._resolved_exe = exe
         return self._resolved_exe
 
+    def config_path(self) -> str | None:
+        """Absolute config dir for a second-login adapter; None for defaults."""
+        if not self.config_dir:
+            return None
+        return os.path.join(os.path.expanduser("~"), self.config_dir)
+
     def build_env(self) -> dict[str, str]:
-        strip = {s.upper() for s in (*COMMON_ENV_STRIP, *self.extra_env_strip)}
-        return {k: v for k, v in os.environ.items() if k.upper() not in strip}
+        strip = {s.upper() for s in
+                 (*COMMON_ENV_STRIP, *CONFIG_DIR_VARS, *self.extra_env_strip)}
+        env = {k: v for k, v in os.environ.items() if k.upper() not in strip}
+        path = self.config_path()
+        if path is not None:
+            if not os.path.isdir(path):
+                raise GraphDefinitionError(
+                    f"provider {self.name!r}: config dir {path!r} does not exist"
+                )
+            env[self.config_var] = path
+        return env
 
     # -- invocation planning (implemented per provider) -------------------- #
 

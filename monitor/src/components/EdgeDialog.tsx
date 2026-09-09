@@ -6,6 +6,7 @@ import { normalizeEdgeGates } from "../graphops";
 import {
   DEFAULT_LABEL_TEMPLATE,
   GEN,
+  PROVIDERS,
   nodeLabel,
   type EdgeSpec,
   type GateSpec,
@@ -249,7 +250,7 @@ export function GraphDialog(props: {
             ))}
           </div>
           <div className="field-label">Per-provider (subdivide the LLM semaphore)</div>
-          {["claude", "codex", "grok"].map((p) => (
+          {PROVIDERS.map((p) => (
             <Field label={p} key={p}>
               <input
                 className="mono"

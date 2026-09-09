@@ -5,6 +5,7 @@ from __future__ import annotations
 from ..errors import GraphDefinitionError
 from .base import (
     COMMON_ENV_STRIP,
+    CONFIG_DIR_VARS,
     InvocationPlan,
     InvocationResult,
     LiveInvocation,
@@ -12,12 +13,14 @@ from .base import (
     invoke,
     kill_tree,
 )
-from .claude import ClaudeAdapter
-from .codex import CodexAdapter
+from .claude import ClaudeAdapter, ClaudeBAdapter
+from .codex import CodexAdapter, CodexBAdapter
 from .grok import GrokAdapter
 
 _REGISTRY: dict[str, ProviderAdapter] = {
-    a.name: a for a in (ClaudeAdapter(), CodexAdapter(), GrokAdapter())
+    a.name: a for a in (
+        ClaudeAdapter(), ClaudeBAdapter(), CodexAdapter(), CodexBAdapter(), GrokAdapter(),
+    )
 }
 
 
@@ -36,6 +39,7 @@ def known_providers() -> list[str]:
 
 __all__ = [
     "COMMON_ENV_STRIP",
+    "CONFIG_DIR_VARS",
     "InvocationPlan",
     "InvocationResult",
     "LiveInvocation",

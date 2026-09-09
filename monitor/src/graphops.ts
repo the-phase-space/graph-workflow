@@ -25,7 +25,9 @@ function numberedId(base: string, taken: Set<string>): string {
 
 /** Per-subtype id prefixes. Every subtype must map to a distinct prefix —
  * never derive from the provider name's first letter (claude/codex collide). */
-const LLM_ID_PREFIX: Record<string, string> = { claude: "LCl", codex: "LCo", grok: "LGr" };
+const LLM_ID_PREFIX: Record<string, string> = {
+  claude: "LCl", claudeb: "LClb", codex: "LCo", codexb: "LCob", grok: "LGr",
+};
 
 function takenIds(g: GraphModel): Set<string> {
   return new Set([GEN, ...g.nodes.map((n) => n.id), ...g.edges.map((e) => e.id)]);
@@ -94,9 +96,8 @@ export function makeNode(g: GraphModel, type: NodeType, provider?: string): Node
         : {
             ...common,
             type: "llm",
-            provider: provider ?? "claude",
-            model:
-              provider === "codex" ? "gpt-5.6-luna" : provider === "grok" ? "grok-4.5" : "sonnet",
+            provider: p,
+            model: p.startsWith("codex") ? "gpt-5.6-luna" : p === "grok" ? "grok-4.5" : "sonnet",
             effort: "medium",
             prompt: "",
             outputs: { response: "str" },

@@ -34,6 +34,7 @@ def _is_result_line(line: str) -> bool:
 class ClaudeAdapter(ProviderAdapter):
     name = "claude"
     executable = "claude"
+    config_var = "CLAUDE_CONFIG_DIR"
     # Stripped just in case headless behavior under a parent Claude Code
     # session ever reverts (see Node Execution Contract in the spec).
     extra_env_strip = ("CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION")
@@ -120,3 +121,10 @@ class ClaudeAdapter(ProviderAdapter):
                 f"claude exited {returncode}: {(stderr or stdout).strip()[-2000:]}"
             )
         return r
+
+
+class ClaudeBAdapter(ClaudeAdapter):
+    """``claude`` on its second config dir — the second login."""
+
+    name = "claudeb"
+    config_dir = ".claudeb"

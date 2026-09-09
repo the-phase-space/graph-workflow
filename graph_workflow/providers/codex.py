@@ -297,6 +297,7 @@ class CodexAppServerInvocation:
 class CodexAdapter(ProviderAdapter):
     name = "codex"
     executable = "codex"
+    config_var = "CODEX_HOME"
     #: The runtime cannot choose the session id; it is the app-server thread
     #: id (or, on the exec fallback, the ``thread.started`` event's id).
     provider_assigns_session = True
@@ -421,3 +422,10 @@ class CodexAdapter(ProviderAdapter):
             r.error = "codex produced no agent message" + (
                 f" ({failure})" if failure else "")
         return r
+
+
+class CodexBAdapter(CodexAdapter):
+    """``codex`` on its second config dir — the second login."""
+
+    name = "codexb"
+    config_dir = ".codexb"

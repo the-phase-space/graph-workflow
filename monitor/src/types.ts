@@ -19,7 +19,11 @@ export interface EdgeSpec {
 }
 
 export type NodeType = "script" | "llm" | "human";
-export type Provider = "claude" | "codex" | "grok";
+export type Provider = "claude" | "claudeb" | "codex" | "codexb" | "grok";
+/** Every provider the runtime knows, in dropdown order. The `b` variants run
+ * the same CLI on its second config dir (~/.claudeb, ~/.codexb) — a second
+ * login, i.e. a second rate limit — and take that CLI's models. */
+export const PROVIDERS: Provider[] = ["claude", "claudeb", "codex", "codexb", "grok"];
 
 export interface NodeSpec {
   id: string;
@@ -188,30 +192,75 @@ export interface Selection {
 export interface ModelOption {
   alias: string;
   id: string;
+  /** Efforts the CLI accepts for this model; empty = no effort dial. */
+  efforts: string[];
 }
 
-/** Friendly aliases shown in the Model dropdown. The graph definition and the
- * provider CLI flag always carry the model id, never the display alias. Ids
- * follow Development\Provider CLI Invocation Reference.md. */
+const BASE_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
+const CLAUDE_EFFORTS = [...BASE_EFFORTS, "ultracode"];
+const CODEX_ULTRA_EFFORTS = [...BASE_EFFORTS, "ultra"];
+const GROK_EFFORTS = ["low", "medium", "high", "xhigh"];
+
+/** Friendly aliases shown in the Model dropdown, with each model's accepted
+ * efforts. The graph definition and the provider CLI flag always carry the
+ * model id, never the display alias. Mirrors the model table in
+ * guide\authoring.md. */
+const CLAUDE_MODELS: ModelOption[] = [
+  { alias: "Fable", id: "fable", efforts: CLAUDE_EFFORTS },
+  { alias: "Opus", id: "opus", efforts: CLAUDE_EFFORTS },
+  { alias: "Sonnet", id: "sonnet", efforts: CLAUDE_EFFORTS },
+  { alias: "Haiku", id: "haiku", efforts: [] },
+];
+const CODEX_MODELS: ModelOption[] = [
+  { alias: "Luna", id: "gpt-5.6-luna", efforts: BASE_EFFORTS },
+  { alias: "Terra", id: "gpt-5.6-terra", efforts: CODEX_ULTRA_EFFORTS },
+  { alias: "Sol", id: "gpt-5.6-sol", efforts: CODEX_ULTRA_EFFORTS },
+  { alias: "Astra", id: "gpt-6-astra", efforts: CODEX_ULTRA_EFFORTS },
+];
 export const PROVIDER_MODELS: Record<string, ModelOption[]> = {
-  claude: [
-    { alias: "Fable", id: "fable" },
-    { alias: "Opus", id: "opus" },
-    { alias: "Sonnet", id: "sonnet" },
-    { alias: "Haiku", id: "haiku" },
-  ],
-  codex: [
-    { alias: "Luna", id: "gpt-5.6-luna" },
-    { alias: "Terra", id: "gpt-5.6-terra" },
-    { alias: "Sol", id: "gpt-5.6-sol" },
-  ],
+  claude: CLAUDE_MODELS,
+  claudeb: CLAUDE_MODELS,
+  codex: CODEX_MODELS,
+  codexb: CODEX_MODELS,
   grok: [
-    { alias: "Grok 4.5", id: "grok-4.5" },
-    { alias: "Grok 4.6", id: "grok-4.6" },
+    { alias: "Grok 4.5", id: "grok-4.5", efforts: GROK_EFFORTS },
+    { alias: "Grok 4.6", id: "grok-4.6", efforts: GROK_EFFORTS },
   ],
 };
 
-export const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
+/** Efforts offered for a provider/model pair: the model's own list when the
+ * model is known; the union over the provider's models for a custom id; the
+ * base scale for an unknown provider. */
+export function effortsFor(
+  provider: string | null | undefined,
+  model: string | null | undefined,
+): string[] {
+  const list = PROVIDER_MODELS[provider ?? ""] ?? [];
+  const hit = list.find((m) => m.id === model);
+  if (hit) return hit.efforts;
+  if (!list.length) return BASE_EFFORTS;
+  const union: string[] = [];
+  for (const m of list) for (const e of m.efforts) if (!union.includes(e)) union.push(e);
+  return union;
+}
+
+/** The effort to keep after a provider or model change: unchanged when the
+ * new pair accepts it; otherwise the nearest lower tier on the base scale,
+ * else the highest tier offered; null when the model has no dial. */
+export function coerceEffort(
+  provider: string | null | undefined,
+  model: string | null | undefined,
+  effort: string | null | undefined,
+): string | null {
+  if (!effort) return null;
+  const allowed = effortsFor(provider, model);
+  if (allowed.includes(effort)) return effort;
+  if (!allowed.length) return null;
+  for (let i = BASE_EFFORTS.indexOf(effort); i >= 0; i--) {
+    if (allowed.includes(BASE_EFFORTS[i])) return BASE_EFFORTS[i];
+  }
+  return allowed[allowed.length - 1];
+}
 
 /** %provider/%model substitution source for default node labels. */
 export const DEFAULT_LABEL_TEMPLATE = "%provider_%model";
@@ -240,8 +289,10 @@ export function nodeFill(node: Pick<NodeSpec, "type" | "provider">): string {
   if (node.type === "human") return "var(--fill-human)";
   switch (node.provider) {
     case "claude":
+    case "claudeb":
       return "var(--fill-claude)";
     case "codex":
+    case "codexb":
       return "var(--fill-codex)";
     case "grok":
       return "var(--fill-grok)";

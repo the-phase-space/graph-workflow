@@ -5,11 +5,8 @@ derive consequences from the mechanisms rather than expecting enumerated
 cases. When this file and the source disagree, the source wins — the runtime
 is small and readable: `graph_workflow/model.py` (declarations), `engine.py`
 (scheduling), `expressions.py` (gates), `runners.py` (node execution),
-`validation.py` (rejections), `providers/` (the CLIs). Executable proof of
-every construct: `tests/graphs/` (each t-file's docstring names the construct
-it demonstrates; `t99` collects what validation rejects; the pytest files
-beside them assert exact semantics) and `examples/demo_pipeline.py`. Verified
-by execution at tag 1.4.5.
+`validation.py` (rejections), `providers/` (the CLIs). The definition at the
+end of this file exercises every construct and was verified by execution.
 
 ## Where your priors mislead
 
@@ -30,8 +27,9 @@ assumptions:
   continues to quiescence.
 - Gating expressions are ordinary Python strings; there is no expression DSL
   and no gate function library.
-- LLM nodes are headless CLI sessions (`claude`, `codex`, `grok`) with
-  permissions bypassed.
+- LLM nodes are headless CLI sessions (`claude`, `codex`, `grok`, plus
+  `claudeb`/`codexb` — the same CLIs on a second login) with permissions
+  bypassed.
 
 ## Shape
 
@@ -62,9 +60,9 @@ if __name__ == "__main__":
     print("REASON:", result.reason)
 ```
 
-The guard is required — tests import definitions, and the Monitor GUI loads
-them with `run()` intercepted — so module level must stay free of side
-effects beyond declarations. Plumb `GW_SEED`/`GW_RUN_DIR` exactly as above;
+The guard is required — the validator and the Monitor GUI import definitions
+with `run()` intercepted — so module level must stay free of side effects
+beyond declarations. Plumb `GW_SEED`/`GW_RUN_DIR` exactly as above;
 that is how launchers steer a definition without editing it.
 
 ## Execution
@@ -108,7 +106,7 @@ still-TRUE back-edge term re-arms D off its own commit. `max_commits=` in
 
 Gating decisions and draws are functions of seed and commit history alone,
 but wall-clock completion order of concurrently running nodes varies;
-`Semaphores(script=1, ...)` when a test asserts ordering.
+`Semaphores(script=1, ...)` when completion order must be deterministic.
 
 ## Declarations
 
@@ -119,7 +117,8 @@ Semaphores(script=4, llm=2, human=1, providers=None)
 
 `providers` (e.g. `{"claude": 1, "codex": 1}`) subdivides the llm pool — an
 LLM node needs a free slot in both, and llm slots are concurrent CLI
-sessions, i.e. real spend. `pause_message`/`resume_message` override what a
+sessions, i.e. real spend. Each login is its own key here: `{"claude": 1,
+"claudeb": 1}` is two concurrent sessions on two accounts. `pause_message`/`resume_message` override what a
 paused LLM session is told (defaults: `DEFAULT_PAUSE_MESSAGE` /
 `DEFAULT_RESUME_MESSAGE`; per-node values override the graph's).
 `add_nodes`/`add_edges` are variadic and reject duplicates.
@@ -190,11 +189,25 @@ extraction entirely. `effort` maps to the CLI's reasoning-effort control;
 `settings` to `claude --settings`; `extra_args` appends verbatim to the CLI
 argv; `timeout_s` ends the invocation as an error (FALSE commit).
 
-| provider | CLI | live steering on Pause |
-|---|---|---|
-| `claude` | `claude -p`, stream-json | yes, mid-turn |
-| `codex` | `codex app-server` JSON-RPC | yes (`GW_CODEX_EXEC=1` = legacy `codex exec`, no steering) |
-| `grok` | `grok --prompt-file` | no — interrupt, halt delivered on session resume |
+| provider | CLI | login (config dir) | live steering on Pause |
+|---|---|---|---|
+| `claude` | `claude -p`, stream-json | `~/.claude` | yes, mid-turn |
+| `claudeb` | as `claude` | `~/.claudeb` | as `claude` |
+| `codex` | `codex app-server` JSON-RPC | `~/.codex` | yes (`GW_CODEX_EXEC=1` = legacy `codex exec`, no steering) |
+| `codexb` | as `codex` | `~/.codexb` | as `codex` |
+| `grok` | `grok --prompt-file` | `~/.grok` | no — interrupt, halt delivered on session resume |
+
+`claudeb`/`codexb` are `claude`/`codex` on the CLI's second config dir, i.e.
+a second login: same CLI, same models and efforts (the `claude` and `codex`
+rows below), a separate rate limit, and a separate key for
+`Semaphores(providers=...)`. Treat the choice as picking which account's
+limit a node spends. The config-dir variables (`CLAUDE_CONFIG_DIR`,
+`CODEX_HOME`, `GROK_HOME`) are stripped from every node's environment
+alongside the API keys and set from the provider name alone, so `claude`
+means the `~/.claude` login even when the definition was launched from a
+`claudeb` session, and an MCP server registered on one login is reachable
+only from nodes on that provider. A missing config dir is an error of the
+same kind as a CLI missing from PATH.
 
 | Provider | Model | CLI slug | Accepted efforts |
 |---|---|---|---|
@@ -207,6 +220,11 @@ argv; `timeout_s` ends the invocation as an error (FALSE commit).
 | `codex` | Terra | `gpt-5.6-terra` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
 | `codex` | Sol | `gpt-5.6-sol` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
 | `codex` | Astra | `gpt-6-astra` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
+
+The table, not `claude --help`, is the accepted set: `ultracode` is absent
+from the help text yet accepted by `--effort`, verified by execution, and
+required whenever a Claude node is meant to achieve its task by running a
+dynamic multi-agent workflow.
 
 ### HumanNode
 
@@ -350,9 +368,8 @@ $env:GW_MONITOR = "0"; python mygraph.py       # REASON: quiescent
 Then read the trace: last event `run_end` with reason `quiescent`, the
 expected commits with `output_state: true` and `error: null`, no `warning`
 events, no literal `$name` in `prompts/*.txt`. Keep scratch run dirs out of
-cloud-synced folders. The same shape makes a pytest: run the file as a
-subprocess with pinned seed and tmp run dir, assert on the trace
-(`tests/conftest.py` is the pattern; set `GW_HUMAN_AUTO` for human nodes).
+cloud-synced folders; set `GW_HUMAN_AUTO` to get through human nodes
+unattended.
 
 ## Policy
 
@@ -361,8 +378,8 @@ subprocess with pinned seed and tmp run dir, assert on the trace
   comment becomes structure instead — a shared module constant, referenced by
   name from every gate string that depends on it.
 - Topology is static; there is no dynamic node spawning. Collections: iterate
-  inside one script node, unroll a known N into parallel nodes (`t21`), or
-  ride the payload around a bounded cycle (`t05`).
+  inside one script node, unroll a known N into parallel nodes, or ride the
+  payload around a bounded cycle.
 - Every quiescence path is designed: loop bounds, branch escape hatches whose
   constants match the bounds they answer, `max_commits` as backstop.
 - Keep script fns and prompt callables as named module-level defs —

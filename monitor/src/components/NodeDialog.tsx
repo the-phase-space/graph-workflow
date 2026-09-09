@@ -7,8 +7,10 @@ import { useEffect, useRef, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { nodeLiveTokens, type RunState } from "../runstate";
 import {
-  EFFORTS,
+  PROVIDERS,
   PROVIDER_MODELS,
+  coerceEffort,
+  effortsFor,
   fmtTokens,
   nodeFill,
   nodeLabel,
@@ -56,6 +58,7 @@ export default function NodeDialog(props: {
   const models = PROVIDER_MODELS[node.provider ?? ""] ?? [];
   const knownModel = models.some((m) => m.id === node.model);
   const modelCustom = customModel || (!knownModel && !!node.model);
+  const efforts = effortsFor(node.provider, node.model);
 
   const received = rt?.receivedInputs ?? new Set<string>();
   const written = rt?.writtenOutputs ?? new Set<string>();
@@ -159,15 +162,17 @@ export default function NodeDialog(props: {
                   <SelectField
                     label="Provider"
                     value={node.provider ?? "claude"}
-                    options={["claude", "codex", "grok"]}
+                    options={PROVIDERS}
                     readOnly={ro}
                     onChange={
                       editable
                         ? (v) => {
                             setCustomModel(false);
+                            const model = PROVIDER_MODELS[v]?.[0]?.id ?? node.model;
                             set({
                               provider: v,
-                              model: PROVIDER_MODELS[v]?.[0]?.id ?? node.model,
+                              model,
+                              effort: coerceEffort(v, model, node.effort),
                             });
                           }
                         : undefined
@@ -189,7 +194,10 @@ export default function NodeDialog(props: {
                             if (v === "__custom__") setCustomModel(true);
                             else {
                               setCustomModel(false);
-                              set({ model: v });
+                              set({
+                                model: v,
+                                effort: coerceEffort(node.provider, v, node.effort),
+                              });
                             }
                           }
                         : undefined
@@ -198,9 +206,13 @@ export default function NodeDialog(props: {
                   <SelectField
                     label="Effort"
                     value={node.effort ?? ""}
-                    options={EFFORTS}
+                    options={[
+                      ...efforts,
+                      ...(node.effort && !efforts.includes(node.effort) ? [node.effort] : []),
+                    ]}
                     allowEmpty
                     readOnly={ro}
+                    hint={efforts.length ? undefined : "This model has no effort dial"}
                     onChange={editable ? (v) => set({ effort: v || null }) : undefined}
                   />
                 </FieldRow>
