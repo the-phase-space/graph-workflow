@@ -317,6 +317,9 @@ class LLMNode(Node):
     """A structured CLI model invocation. One LLM node = one provider = one
     CLI invocation per node invocation.
 
+    Grok uses the CLI's default model; ``model`` is ignored and omitted from
+    serialized node metadata for that provider.
+
     ``prompt`` is a ``string.Template``-style string (``$name`` placeholders
     substitute captured inputs) or a callable ``prompt(inputs) -> str``.
 
@@ -332,7 +335,7 @@ class LLMNode(Node):
         id,
         rank,
         provider: str,
-        model: str,
+        model: str | None,
         prompt,
         effort: str | None = None,
         settings: str | None = None,
@@ -361,10 +364,11 @@ class LLMNode(Node):
         d = super().to_json()
         d.update(
             provider=self.provider,
-            model=self.model,
             effort=self.effort,
             prompt=self.prompt if isinstance(self.prompt, str) else repr(self.prompt),
         )
+        if self.provider != "grok":
+            d["model"] = self.model
         return d
 
 

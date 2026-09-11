@@ -219,7 +219,6 @@ def node_to_contract(node: Node, namespace: dict) -> dict:
         d.update(_prompt_fields(node.prompt, namespace))
         d.update(
             provider=node.provider,
-            model=node.model,
             effort=node.effort,
             settings=node.settings,
             cwd=node.cwd,
@@ -228,6 +227,8 @@ def node_to_contract(node: Node, namespace: dict) -> dict:
             pause_message=node.pause_message,
             resume_message=node.resume_message,
         )
+        if node.provider != "grok":
+            d["model"] = node.model
         if node.parse is not None:
             d["parse_ref"] = _callable_ref(node.parse, namespace) or repr(node.parse)
     elif isinstance(node, HumanNode):
