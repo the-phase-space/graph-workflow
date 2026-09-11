@@ -1,4 +1,5 @@
-"""Grok provider adapter (``grok``). Prompts are passed via ``--prompt-file``;
+"""Grok provider adapter (``grok``), using the CLI's default model.
+Prompts are passed via ``--prompt-file``;
 the ``max`` reasoning effort is converted to ``xhigh``."""
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ class GrokAdapter(ProviderAdapter):
 
     def _common(self, node, cwd, prompt_file) -> list[str]:
         argv = ["--prompt-file", prompt_file, "--yolo", "--no-auto-update"]
-        argv += ["--cwd", cwd, "--model", node.model]
+        argv += ["--cwd", cwd]
         if node.effort:
             argv += ["--reasoning-effort", _EFFORT_MAP.get(node.effort, node.effort)]
         argv += ["--verbatim", "--output-format", "json"]
