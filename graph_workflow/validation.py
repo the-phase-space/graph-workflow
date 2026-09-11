@@ -186,7 +186,8 @@ def validate(graph: Graph, namespace: dict | None = None) -> list[str]:
                     f"LLM node {node.id!r}: unknown provider {node.provider!r} "
                     f"(known: {sorted(providers)})"
                 )
-            if not node.model:
+            # Grok always uses its CLI's default model.
+            if node.provider != "grok" and not node.model:
                 errors.append(f"LLM node {node.id!r}: model is required")
             if node.prompt is None:
                 errors.append(f"LLM node {node.id!r}: prompt is required")
