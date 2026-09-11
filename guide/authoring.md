@@ -20,11 +20,11 @@ assumptions:
   TRUE term at arming, paired by name.
 - Everything is level-triggered. Terms are pure functions of current output
   states — not events, not queues — re-evaluated only when a node they
-  mention commits.
+  depend on commits (dependencies are defined under Execution).
 - Rank is a scheduling priority, not topology.
-- Failure is a value. Exceptions, timeouts, and missing LLM outputs commit
-  FALSE with an error recorded; nothing raises across the graph; the run
-  continues to quiescence.
+- Failure is a value. Exceptions and timeouts are recorded on the commit;
+  missing required outputs make the default output expression FALSE.
+  Nothing raises across the graph; the run continues to quiescence.
 - Gating expressions are ordinary Python strings; there is no expression DSL
   and no gate function library.
 - LLM nodes are headless CLI sessions (`claude`, `codex`, `grok`, plus
@@ -81,9 +81,12 @@ that is how launchers steer a definition without editing it.
 4. When an invocation ends, the node's output expression is evaluated over
    its declared outputs. That evaluation is the commit; its boolean is the
    node's output state — the value every downstream term reads.
-5. After a commit, exactly the gating expressions mentioning the committed
-   node re-evaluate (stochastic gates on its out-edges redraw first). Ready
-   nodes whose gates went FALSE are demoted to idle.
+5. After a commit, dependent nodes re-evaluate their gates (stochastic gates
+   on the committing node's out-edges redraw first). Every incoming supplier
+   is a dependency, as is each node ID or `GEN` appearing as a Python name in
+   the node gate or applicable in-edge gates. Explicit references are found
+   by syntax scan (`ast.Name`), not by tracking reads during evaluation.
+   Ready nodes whose gates went FALSE are demoted to idle.
 6. The run ends when nothing is ready, running, or paused mid-invocation:
    `reason: quiescent` — the clean ending even when branches never fired.
    Other reasons: `stopped`, `commit_limit`, `keyboard_interrupt`.
@@ -130,9 +133,11 @@ Node(id, rank, inputs=None, outputs=None, gate=None, output_expression=None)
 ```
 
 - `id` — a non-keyword Python identifier, never `GEN`, unique across nodes
-  and edges together (they share the expression namespace). Bind each node
-  object to a module variable of the same name; expressions resolve that name
-  to the node's runtime handle.
+  and edges together (they share the expression namespace). Every registered
+  node's ID names its runtime handle in expressions, even when the object is
+  held in a collection or differently named variable. Binding
+  `A = ScriptNode("A", ...)` is a convention; a Python global named `A` is
+  unnecessary for `A.commits` to resolve inside a gate.
 - `rank` — unique int; number in flow order. Lowest ready rank starts first.
 - `inputs` / `outputs` — `{name: type}`; types are declarative only, not
   enforced. Choose output names globally before drawing any edge — names are
@@ -179,15 +184,80 @@ input, non-strings JSON-encoded, `$$` a literal `$`, and a name never
 captured survives as literal `$name` text, silently — or a callable
 `prompt(inputs) -> str`; use the callable and branch on `isDefined(...)`
 whenever an input is optional. If `response` is declared it receives the raw
-reply text; every other declared output is extracted from the last JSON
-object in the reply (fenced blocks first), so the prompt must end by
+reply text; by default, every other declared output is extracted from the
+last JSON object in the reply (fenced blocks first), so the prompt must end by
 demanding it — "End your reply with exactly one JSON object, no prose after
 it, no code fences:" followed by a sketch carrying exactly the declared
 names. A declared key missing from the reply stays undefined, and the default
 output expression then commits FALSE. `parse(text, raw) -> dict` replaces the
-extraction entirely. `effort` maps to the CLI's reasoning-effort control;
-`settings` to `claude --settings`; `extra_args` appends verbatim to the CLI
-argv; `timeout_s` ends the invocation as an error (FALSE commit).
+JSON extraction; its keys map onto declared outputs, undeclared keys warn
+and drop. Bind per-node output names with a parser factory:
+
+```python
+def capture(output_name):
+    def parse_reply(text, raw):
+        return {output_name: text.strip()}
+    return parse_reply
+
+
+parse_a = capture("answer_a")
+parse_b = capture("answer_b")
+```
+
+The first node uses `parse=parse_a, outputs={"answer_a": str}`; the second
+uses `parse=parse_b, outputs={"answer_b": str}`. Each factory call binds its
+own output name, which must match the returned key and declared output.
+When generating nodes in a loop, call the factory per node; closures reading
+a changing loop variable would share its final binding.
+
+`effort` maps to the CLI's reasoning-effort control; `settings` to
+`claude --settings`; `timeout_s` ends the invocation with an error.
+
+`extra_args` supplies provider arguments, one list element per argument:
+normally separate elements for a flag and its value. Keep a value containing
+spaces in one element, without shell quotes. `["--tools", ""]` supplies an
+empty value; `["--tools"]` omits it; `["--tools", '""']` supplies literal quote
+characters. Use the first form for Claude's empty-set recipe below.
+
+GW passes argv directly to `subprocess.Popen` without enabling a shell or
+adding quoting. Python's `shutil.which` selects the executable; on Windows,
+this may be a `.cmd` wrapper whose argument parsing GW neither bypasses nor
+validates. The list contract does not guarantee arbitrary wrapper behavior.
+
+For Claude and Grok, `extra_args` follows GW's generated CLI options and
+precedes `--session-id ID` or `--resume ID`; no special terminator is needed
+for the empty Claude value. Codex defaults to
+`[exe, "app-server", *extra_args]`: use server startup options such as
+`--disable FEATURE` or `-c key=value`. Model and effort are sent later by
+RPC; `extra_args` is not an RPC parameter map. The legacy `GW_CODEX_EXEC=1`
+path takes `codex exec` arguments instead.
+
+Tool availability is separate from a prompt instruction to refrain from
+using tools. GW has no dedicated tool-availability parameter; use provider
+controls through `extra_args`. GW independently requests permission bypass:
+Claude `--dangerously-skip-permissions`, Grok `--yolo`, and Codex
+`approvalPolicy="never", sandbox="danger-full-access"` on thread start and
+resume. These policies do not remove tools.
+
+Controls below are supported by installed CLI help and adapter wiring
+(2026-09-10); Codex's feature listing also confirmed `shell_tool=false`.
+Claude's first `system`/`init` line in `sessions/<node>-<inv>.jsonl`
+lists the tools a session actually had, which is the inventory to trust:
+
+| Provider | `extra_args` | Scope |
+|---|---|---|
+| `claude` / `claudeb` | `["--tools", ""]` | Disables built-in tools. `["--tools", "Read"]` selects named built-ins. Neither establishes exclusion of MCP tools. |
+| | `["--tools", "", "--strict-mcp-config"]` | `tools: []`, `mcp_servers: []` (verified) |
+| `grok` | `["--disable-web-search"]` | Disables web search/fetch. `--tools <TOOLS>` and `--disallowed-tools <TOOLS>` select/remove comma-separated built-ins; empty `--tools` has no documented no-tools meaning. |
+| `codex` / `codexb` | `["--disable", "shell_tool"]` | Turns off the default shell tool feature in app-server mode; other tools are outside this control. |
+
+No complete no-tools recipe is established here for Grok or Codex. Grok's
+hyphenated `--disallowed-tools` removes built-ins; `--disallowedTools` is a
+permission-rule alias.
+
+A model handed an empty tool set may still emit tool-call markup as plain
+text; when a node is meant to answer without tools, its prompt should say it
+has none.
 
 | provider | CLI | login (config dir) | live steering on Pause |
 |---|---|---|---|
@@ -256,15 +326,15 @@ edge contributes exactly one term to each output node's gate:
     term(edge, o) = universal_gate AND output_gate(o)
                     AND, over every input i: input_gate(i) AND output_state(i)
 
-All gates default to True, so a default edge is pure feedforward and an N:M
-edge behaves as N×M separate 1:1 edges. An input that never committed, or
-committed FALSE, makes the term FALSE, and a FALSE-term edge transfers no
-data at capture. Placement is scope: `universal_gate` covers the whole edge
-(and owns one shared random draw); `output_gates` are per-destination
-(independent draws — per-branch probabilities go here); `input_gates` are
-ANDed in like the rest — a FALSE input gate blocks the whole term, it does
-not deliver the other inputs. There is no per-edge OR: give the node separate
-edges and write `gate="e_a or e_b"`.
+With default edge and node gates, an N:M edge has the same Boolean arming
+condition as N×M separate 1:1 edges. Capture is still per edge: an input that
+never committed, or committed FALSE, makes the term FALSE, and a FALSE-term
+edge transfers no data at capture. Placement is scope: `universal_gate`
+covers the whole edge (and owns one shared random draw); `output_gates` are
+per-destination (independent draws — per-branch probabilities go here);
+`input_gates` are ANDed in like the rest — a FALSE input gate blocks the
+whole term, it does not deliver the other inputs. There is no per-edge OR:
+give the node separate edges and write `gate="e_a or e_b"`.
 
 Universal and output gates evaluate before input output-states are checked,
 including at run start, so guard every read of a node output with
@@ -277,6 +347,39 @@ Each gate owns an RNG stream seeded by `(run seed, gate id)`: draw #0 at run
 start, a redraw at every commit of the edge's input nodes, never at
 evaluation. Same seed + same definition = same draws, exactly; each redraw of
 a non-default gate is a `draw` trace event.
+
+For fan-in that completes even when a supplier commits FALSE, assume
+registered A and B each run once, declare `a` and `b`, and leave rank 20
+unused:
+
+```python
+def collect(i):
+    return {"results": {"a": i.get("a", None), "b": i.get("b", None)}}
+
+
+C = ScriptNode(
+    "C", rank=20, fn=collect,
+    inputs={"a": str, "b": str}, outputs={"results": dict},
+    gate="A.commits >= 1 and B.commits >= 1",
+)
+g.add_nodes(C)
+g.add_edges(
+    Edge("e_a", inputs=[A], outputs=[C]),
+    Edge("e_b", inputs=[B], outputs=[C]),
+)
+```
+
+The node gate waits for both completions; each edge supplies data only when
+its own term is TRUE. If A commits TRUE and B FALSE, C captures `a` and sees
+`b` as `UNDEFINED`; `i.get` replaces only `UNDEFINED` with the chosen fallback.
+The default node gate would block C. With one grouped `[A, B] -> C` edge
+and the custom gate above, C would run but capture neither value: B makes
+that edge's sole term FALSE.
+
+C's own commit does not re-evaluate its
+gate (the gate mentions A and B, not C), so single-run suppliers need no
+`C.invocations == 0` guard; suppliers that re-fire need the bound and
+alternation guard from Execution.
 
 ## Expressions
 
@@ -297,6 +400,35 @@ the first commit) plus metrics — the reserved names outputs may not use:
 running), `output_state`, `invocations`/`commits` (starts vs commits — a
 mid-flight invocation has incremented only the former), `context_size`,
 `duration_s`, `usage`, `session_id`, `last_commit_seq`.
+
+`commits` increments for both TRUE and FALSE commits, including error
+completions. Thus `A.commits >= 1` means A has completed at least once.
+`output_state` is the latest output-expression result, not an error flag:
+partial outputs may commit FALSE, and a custom output expression can commit
+TRUE even after an error. Values on a FALSE node remain readable through its
+handle but do not transfer through a FALSE-term edge.
+
+Handle injection is confined to expression evaluation: it creates no module
+variables and does not change a helper's Python globals. A module global
+sharing a node ID is shadowed; validation warns unless it holds that exact
+registered node object. An absent global causes no shadow warning.
+
+The gate `"A.commits >= 1 and B.commits >= 1"` and this helper form expose
+the same dependencies:
+
+```python
+def finished(*nodes):
+    return all(node.commits >= 1 for node in nodes)
+
+
+gate="finished(A, B)"
+```
+
+In `gate="finished_group()"`, node references hidden inside the helper add
+no dependencies; neither do nodes hidden in a module-level collection.
+Incoming suppliers remain dependencies. Pass needed handles as explicit
+arguments to supply them to the helper and expose them to the syntax scan.
+Output expressions are not scanned for gate dependencies.
 
 ## Running
 
