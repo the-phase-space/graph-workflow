@@ -31,14 +31,18 @@ function Install-Directory([string]$Source, [string]$Target) {
     $hadTarget = Test-Path -LiteralPath $Target
     if ($hadTarget) {
         New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
-        Move-Item -LiteralPath $Target -Destination $backup
+        Copy-Item -LiteralPath $Target -Destination $backup -Recurse
     }
     try {
+        # A cross-volume directory move can leave the old destination in
+        # place. Remove it explicitly so Move-Item cannot nest Source inside it.
+        if ($hadTarget) { Remove-Item -LiteralPath $Target -Recurse -Force }
         Move-Item -LiteralPath $Source -Destination $Target
     }
     catch {
-        if ($hadTarget -and -not (Test-Path -LiteralPath $Target)) {
-            Move-Item -LiteralPath $backup -Destination $Target
+        if (Test-Path -LiteralPath $Target) { Remove-Item -LiteralPath $Target -Recurse -Force }
+        if ($hadTarget) {
+            Copy-Item -LiteralPath $backup -Destination $Target -Recurse
         }
         throw
     }
@@ -69,9 +73,12 @@ try {
         Where-Object { $_.ExecutablePath -eq $installedExe })
     foreach ($monitor in $running) {
         if (Get-Process -Id $monitor.ProcessId -ErrorAction SilentlyContinue) {
-            Stop-Process -Id $monitor.ProcessId -Force
             $stoppedMonitors += $monitor
-            Wait-Process -Id $monitor.ProcessId -Timeout 10 -ErrorAction SilentlyContinue
+            # WebView2 children can retain the shortcut's bin working directory.
+            & taskkill.exe /PID $monitor.ProcessId /T /F | Out-Null
+            if (Get-Process -Id $monitor.ProcessId -ErrorAction SilentlyContinue) {
+                throw 'Could not stop the Monitor for installation'
+            }
         }
     }
     Install-Directory $stagedBin (Join-Path $monitorRoot 'bin')
