@@ -31,7 +31,7 @@ export default function Sidebar(props: {
   onSave: () => void;
   onSaveAs: () => void;
   onValidate: () => void;
-  onRun: (seed: string) => void;
+  onRun: () => void;
   onAttach: () => void;
   onAddNode: (kind: string) => void;
   onAddEdge: () => void;
@@ -44,7 +44,6 @@ export default function Sidebar(props: {
   onToggleTheme: () => void;
 }) {
   const [minimized, setMinimized] = useState(false);
-  const [seed, setSeed] = useState("");
   const [width, setWidth] = useState<number>(() => {
     const stored = Number(localStorage.getItem("gw-sidebar-width"));
     return Number.isFinite(stored) && stored >= SIDEBAR_MIN_W && stored <= SIDEBAR_MAX_W
@@ -242,21 +241,16 @@ export default function Sidebar(props: {
           )}
 
           <div className="section">
-            <div className="seed-row">
-              <label>Seed</label>
-              <input
-                value={seed}
-                onChange={(e) => setSeed(e.target.value)}
-                placeholder="random"
-                spellCheck={false}
-              />
-            </div>
             <div className="btn-col">
               <button
                 className="run-btn"
                 disabled={!props.model || !props.path}
-                title={!props.path ? "Save the graph definition first" : "Run this graph definition"}
-                onClick={() => props.onRun(seed)}
+                title={
+                  !props.path
+                    ? "Save the graph definition first"
+                    : "Run this graph definition (seed and Monitor policy come from Graph settings)"
+                }
+                onClick={props.onRun}
               >
                 ▶ Run
               </button>

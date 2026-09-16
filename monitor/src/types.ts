@@ -78,6 +78,12 @@ export interface GraphModel {
   resume_message: string | null;
   /** Absolute run directory the definition declares; null = runtime picks %TEMP%/<hash>. */
   run_dir: string | null;
+  /** Run seed the definition declares; null = the runtime draws one per run. */
+  seed: number | null;
+  /** Monitor GUI launch policy the definition declares: true = launch the
+   * default exe, false = never, a string = that exe, null = auto (default
+   * exe when installed and the console is interactive). */
+  monitor: boolean | string | null;
   nodes: NodeSpec[];
   edges: EdgeSpec[];
   /** Template for freshly created nodes' default labels (GUI-owned). */

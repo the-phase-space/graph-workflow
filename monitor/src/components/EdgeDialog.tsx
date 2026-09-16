@@ -12,7 +12,21 @@ import {
   type GateSpec,
   type GraphModel,
 } from "../types";
-import { AreaField, CollapseButton, Field, KV, TextField } from "./fields";
+import { AreaField, CollapseButton, Field, KV, SelectField, TextField } from "./fields";
+
+const MONITOR_OPTIONS = [
+  { label: "auto — when installed and the console is interactive", value: "auto" },
+  { label: "always launch the default exe", value: "on" },
+  { label: "never launch", value: "off" },
+  { label: "launch a specific exe…", value: "exe" },
+];
+
+function monitorMode(m: GraphModel["monitor"]): string {
+  if (m === true) return "on";
+  if (m === false) return "off";
+  if (typeof m === "string") return "exe";
+  return "auto";
+}
 
 function GateEditor(props: {
   label: string;
@@ -243,6 +257,53 @@ export function GraphDialog(props: {
             hint="Absolute path the definition declares for its runs. Empty: the runtime creates a hashed folder in %TEMP%."
             onChange={editable ? (v) => set({ run_dir: v || null }) : undefined}
           />
+          <TextField
+            label="Seed"
+            value={model.seed == null ? "" : String(model.seed)}
+            mono
+            readOnly={!editable}
+            placeholder="random per run"
+            hint="Integer run seed the definition declares. Every gate's random stream derives from it; the same definition and seed reproduce every draw. Empty: the runtime draws a fresh seed each run."
+            onChange={
+              editable
+                ? (v) => {
+                    const t = v.trim();
+                    if (t === "") set({ seed: null });
+                    else if (/^-?\d+$/.test(t)) set({ seed: Number(t) });
+                  }
+                : undefined
+            }
+          />
+          <SelectField
+            label="Monitor GUI"
+            value={monitorMode(model.monitor)}
+            options={MONITOR_OPTIONS}
+            readOnly={!editable}
+            hint="Whether executing the definition launches (or attaches to) the Monitor GUI. Runs started from this window always show here regardless."
+            onChange={
+              editable
+                ? (v) =>
+                    set({
+                      monitor:
+                        v === "on" ? true
+                        : v === "off" ? false
+                        : v === "exe" ? (typeof model.monitor === "string" ? model.monitor : "")
+                        : null,
+                    })
+                : undefined
+            }
+          />
+          {typeof model.monitor === "string" && (
+            <TextField
+              label="Monitor exe"
+              value={model.monitor}
+              mono
+              readOnly={!editable}
+              placeholder="C:\path\to\graph-workflow-monitor.exe"
+              hint="Path of the Monitor exe to launch. Empty falls back to auto."
+              onChange={editable ? (v) => set({ monitor: v }) : undefined}
+            />
+          )}
         </div>
         <div className="subsection">
           <div className="section-title">Semaphores</div>

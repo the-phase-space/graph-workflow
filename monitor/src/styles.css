@@ -279,17 +279,6 @@ body.col-resizing .sidebar-handle {
   text-align: left;
 }
 
-.seed-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.seed-row label {
-  color: var(--label);
-  font-weight: 700;
-}
-
 .run-btn {
   background: color-mix(in srgb, var(--accent) 20%, var(--panel-2));
   font-weight: 600;

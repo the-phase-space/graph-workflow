@@ -96,6 +96,7 @@ class Runtime:
         validate_graph: bool = True,
         console: bool = True,
         max_commits: int | None = None,
+        monitor: bool | str | None = None,
         _resume_events: list[dict] | None = None,
         _run_id: str | None = None,
     ):
@@ -111,19 +112,17 @@ class Runtime:
             warnings = validate(graph, self.namespace)
         else:
             warnings = []
-        if seed is None and os.environ.get("GW_SEED"):
-            # Launcher interchange: the Monitor sets GW_SEED when it executes
-            # a definition. Explicit arguments always win.
-            try:
-                seed = int(os.environ["GW_SEED"])
-            except ValueError:
-                pass
+        # The definition declares its seed; an explicit argument overrides
+        # it; neither draws a fresh one.
+        if seed is None:
+            seed = graph.seed
         if seed is None:
             import secrets
 
             seed = secrets.randbits(63)
         self.seed = int(seed)
         self.max_commits = max_commits
+        self.monitor_setting = graph.monitor if monitor is None else monitor
 
         if _run_id is not None:
             self.run_id = _run_id
@@ -272,25 +271,26 @@ class Runtime:
         """Executing a graph definition automatically launches or attaches
         the Monitor GUI for that run (the GUI is single-instance, so a second
         launch forwards the run dir to the running window — both entry paths
-        converge on one shared session). GW_MONITOR controls it: '0'/'off'
-        never launches; '1' launches the default exe; a path launches that
-        exe; unset launches the default exe only when it exists and stderr is
-        an interactive console (so test harnesses and pipelines stay
-        headless). The GUI itself sets GW_MONITOR=0 on runs it spawns."""
+        converge on one shared session). The definition's ``Graph(monitor=)``
+        declaration controls it, overridable per run by ``run(monitor=)``:
+        False never launches; True launches the default exe; a path launches
+        that exe; None launches the default exe only when it exists and
+        stderr is an interactive console (so test harnesses, pipelines, and
+        runs the GUI itself spawns stay headless)."""
         import subprocess
         import sys as _sys
 
-        setting = os.environ.get("GW_MONITOR", "").strip()
-        if setting.lower() in ("0", "off", "no", "none", "false"):
+        setting = self.monitor_setting
+        if setting is False:
             return
-        if setting and setting.lower() not in ("1", "on", "yes", "true"):
-            exe = Path(setting)
+        if isinstance(setting, str) and setting.strip():
+            exe = Path(setting.strip())
         else:
             exe_name = (
                 "graph-workflow-monitor.exe" if os.name == "nt" else "graph-workflow-monitor"
             )
             exe = Path(__file__).resolve().parent.parent / "monitor" / "bin" / exe_name
-            if not setting:
+            if setting is not True:
                 try:
                     if not _sys.stderr.isatty():
                         return
@@ -878,10 +878,13 @@ def run(
     validate_graph: bool = True,
     console: bool = True,
     max_commits: int | None = None,
+    monitor: bool | str | None = None,
 ) -> RunResult:
     """Start a run of the graph. Called from the graph definition file —
-    executing the file starts the run. The evaluation namespace defaults to
-    the caller's module globals (the graph definition's own namespace)."""
+    executing the file starts the run. ``seed``, ``run_dir``, and ``monitor``
+    default to the graph's own declarations. The evaluation namespace
+    defaults to the caller's module globals (the graph definition's own
+    namespace)."""
     if namespace is None:
         import sys
 
@@ -894,6 +897,7 @@ def run(
         validate_graph=validate_graph,
         console=console,
         max_commits=max_commits,
+        monitor=monitor,
     )
     return rt.run()
 
@@ -904,6 +908,7 @@ def resume_run(
     namespace: dict | None = None,
     console: bool = True,
     max_commits: int | None = None,
+    monitor: bool | str | None = None,
 ) -> RunResult:
     """Resume a run from its disk trace (crash recovery or a paused run in a
     dead process). The graph definition and seed must be unchanged; replayed
@@ -927,6 +932,7 @@ def resume_run(
         validate_graph=True,
         console=console,
         max_commits=max_commits,
+        monitor=monitor,
         _resume_events=events,
         _run_id=head.get("run_id"),
     )

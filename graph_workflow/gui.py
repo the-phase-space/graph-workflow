@@ -245,6 +245,8 @@ def graph_to_contract(graph: Graph, namespace: dict) -> dict:
         "pause_message": graph.pause_message,
         "resume_message": graph.resume_message,
         "run_dir": graph.run_dir,
+        "seed": graph.seed,
+        "monitor": graph.monitor,
         "nodes": [node_to_contract(n, namespace) for n in graph.nodes_by_rank()],
         "edges": [
             {
@@ -506,6 +508,13 @@ def generate(contract: dict) -> str:
         graph_pairs.append(("resume_message", repr(g["resume_message"])))
     if g.get("run_dir"):
         graph_pairs.append(("run_dir", repr(g["run_dir"])))
+    if g.get("seed") is not None and str(g["seed"]).strip() != "":
+        graph_pairs.append(("seed", repr(int(g["seed"]))))
+    monitor = g.get("monitor")
+    if isinstance(monitor, bool):
+        graph_pairs.append(("monitor", repr(monitor)))
+    elif isinstance(monitor, str) and monitor.strip():
+        graph_pairs.append(("monitor", repr(monitor.strip())))
     body.append(f"g = Graph({name!r}, {_kwargs(graph_pairs)})")
     body.append("")
 
@@ -682,6 +691,8 @@ def template(name: str = "untitled") -> dict:
             "pause_message": None,
             "resume_message": None,
             "run_dir": None,
+            "seed": None,
+            "monitor": None,
             "nodes": [],
             "edges": [],
         },

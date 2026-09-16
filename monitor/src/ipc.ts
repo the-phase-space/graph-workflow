@@ -37,8 +37,8 @@ export interface DirEntry {
 
 export const listDir = (path: string) => invoke<DirEntry[]>("list_dir", { path });
 
-export const spawnRun = (file: string, runDir: string, seed: string | null, logPath: string) =>
-  invoke<number>("spawn_run", { file, runDir, seed, logPath });
+export const spawnRun = (file: string, runDir: string, logPath: string) =>
+  invoke<number>("spawn_run", { file, runDir, logPath });
 
 interface BackendRaw {
   code: number;

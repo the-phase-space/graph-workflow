@@ -45,6 +45,8 @@ function graphFromTrace(g: any): GraphModel {
     pause_message: g?.pause_message ?? null,
     resume_message: g?.resume_message ?? null,
     run_dir: g?.run_dir ?? null,
+    seed: g?.seed ?? null,
+    monitor: g?.monitor ?? null,
     nodes: (g?.nodes ?? []).map((n: any) => ({
       id: n.id,
       rank: n.rank,

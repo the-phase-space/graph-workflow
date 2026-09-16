@@ -411,7 +411,7 @@ export default function App() {
   }, [contract, dirty, doSave, report]);
 
   const doRun = useCallback(
-    async (seed: string) => {
+    async () => {
       if (!contract) return;
       let path = contract.path;
       if (!path || dirty) path = await doSave();
@@ -427,7 +427,7 @@ export default function App() {
           ? joinPath(tempRuns, `${slug}-${stamp()}`)
           : joinPath(dirname(path), "runs", `gui-${stamp()}`));
       try {
-        await spawnRun(path, rd, seed.trim() || null, joinPath(rd, "run.log"));
+        await spawnRun(path, rd, joinPath(rd, "run.log"));
         setSelection(null);
         setRunDir(rd);
       } catch (e) {
@@ -606,7 +606,7 @@ export default function App() {
         onSave={() => void doSave()}
         onSaveAs={() => void doSaveAs()}
         onValidate={() => void doValidate()}
-        onRun={(s) => void doRun(s)}
+        onRun={() => void doRun()}
         onAttach={() => void doAttach()}
         onAddNode={doAddNode}
         onAddEdge={doAddEdge}

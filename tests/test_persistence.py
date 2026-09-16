@@ -94,7 +94,6 @@ class PersistenceRunTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.calls = []
         self.addCleanup(patch.stopall)
-        patch.dict(os.environ, {"GW_MONITOR": "0"}).start()
         self.invoker = patch("graph_workflow.runners._invoke_llm",
                              side_effect=self.reply).start()
 
@@ -107,7 +106,7 @@ class PersistenceRunTests(unittest.TestCase):
 
     def runtime(self, graph, name="run", **kwargs):
         return Runtime(graph, run_dir=self.root / name, seed=17, namespace={},
-                       console=False, max_commits=20, **kwargs)
+                       console=False, max_commits=20, monitor=False, **kwargs)
 
     def test_transitive_and_chained_contexts_use_each_nodes_prompt(self):
         graph = pair()

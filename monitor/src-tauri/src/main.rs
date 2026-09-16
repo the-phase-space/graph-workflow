@@ -291,12 +291,7 @@ fn backend(args: Vec<String>, stdin: Option<String>, timeout_ms: Option<u64>) ->
 // ---------------------------------------------------------------------- //
 
 #[tauri::command]
-fn spawn_run(
-    file: String,
-    run_dir: String,
-    seed: Option<String>,
-    log_path: String,
-) -> Result<u32, String> {
+fn spawn_run(file: String, run_dir: String, log_path: String) -> Result<u32, String> {
     let file_path = PathBuf::from(&file);
     let cwd = file_path
         .parent()
@@ -317,11 +312,11 @@ fn spawn_run(
     let mut cmd = python_command(root.as_deref());
     cmd.arg("-u").arg(&file_path);
     cmd.current_dir(&cwd); // graph definitions resolve paths from their own directory
+    // Seed and Monitor policy are the definition's own declarations; the
+    // only launcher steer is the run dir for a graph that declares none.
+    // Redirected stdio keeps the runtime's auto-launch of a second Monitor
+    // quiet, and a declared launch just refocuses this single instance.
     cmd.env("GW_RUN_DIR", &run_dir);
-    cmd.env("GW_MONITOR", "0"); // this GUI is already the run's monitor
-    if let Some(seed) = seed.filter(|s| !s.trim().is_empty()) {
-        cmd.env("GW_SEED", seed.trim());
-    }
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::from(log));
     cmd.stderr(Stdio::from(log2));

@@ -492,12 +492,21 @@ class Graph:
         pause_message: str | None = None,
         resume_message: str | None = None,
         run_dir: str | None = None,
+        seed: int | None = None,
+        monitor: bool | str | None = None,
     ):
         self.name = str(name)
         self.semaphores = semaphores or Semaphores()
         # Absolute path the graph declares for its runs; None lets the
         # runtime pick a hashed folder under %TEMP%.
         self.run_dir = run_dir
+        # The run seed the graph declares; None draws one at run start.
+        self.seed = None if seed is None else int(seed)
+        # Whether executing the definition launches the Monitor GUI: True
+        # launches the default exe, False never, a path launches that exe,
+        # None launches the default exe only when it exists and the console
+        # is interactive.
+        self.monitor = monitor
         self.generator = Generator()
         self.nodes: dict[str, Node] = {}
         self.edges: dict[str, Edge] = {}
@@ -567,6 +576,8 @@ class Graph:
             "pause_message": self.pause_message,
             "resume_message": self.resume_message,
             "run_dir": self.run_dir,
+            "seed": self.seed,
+            "monitor": self.monitor,
         }
 
     def __repr__(self):

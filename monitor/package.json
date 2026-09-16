@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "build:app": "pwsh -NoProfile -File build.ps1",
     "tauri": "tauri"
   },
   "dependencies": {

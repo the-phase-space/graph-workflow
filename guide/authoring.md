@@ -37,7 +37,7 @@ if __name__ == "__main__":
     print("REASON:", result.reason)
 ```
 
-The guard is required — the validator and the Monitor GUI import definitions with `run()` intercepted — so module level must stay free of side effects beyond declarations. `Graph(..., run_dir=...)` is the graph's declaration of where its runs live: an absolute path, taken as given, never inside a cloud-synced folder. Omit it, as here, and the runtime creates a hashed folder in `%TEMP%`.
+The guard is required — the validator and the Monitor GUI import definitions with `run()` intercepted — so module level must stay free of side effects beyond declarations. `Graph(..., run_dir=...)` is the graph's declaration of where its runs live: an absolute path, taken as given, never inside a cloud-synced folder. Omit it, as here, and the runtime creates a hashed folder in `%TEMP%`. `seed=` (run seed; omitted = random per run) and `monitor=` (`True`/`False`/exe path; omitted = launch the Monitor GUI only when installed and the console is interactive) are declared the same way.
 
 ## Execution
 
@@ -63,7 +63,8 @@ Gating decisions and draws are functions of seed and commit history alone, but w
 ## Declarations
 
 ```python
-Graph(name, semaphores=None, pause_message=None, resume_message=None)
+Graph(name, semaphores=None, pause_message=None, resume_message=None,
+      run_dir=None, seed=None, monitor=None)
 Semaphores(script=4, llm=2, human=1, providers=None)
 ```
 
@@ -282,11 +283,11 @@ In `gate="finished_group()"`, node references hidden inside the helper add no de
 
 ```python
 run(graph, seed=None, namespace=None, run_dir=None,
-    validate_graph=True, console=True, max_commits=None) -> RunResult
+    validate_graph=True, console=True, max_commits=None, monitor=None) -> RunResult
 resume_run(graph, trace_path) -> RunResult
 ```
 
-`seed=None` reads `GW_SEED`, else draws randomly. `run_dir=None` takes the graph's declared `run_dir`, else `GW_RUN_DIR` (a launcher's steer for undeclared graphs), else creates a hashed folder in `%TEMP%`. `namespace` defaults to the caller's module globals — which is how the expression namespace comes to be the definition module; override only when embedding. `RunResult`: `run_id`, `run_dir`, `trace_path`, `seed`, `reason`, `states`, `output_state(nid)`, `outputs(nid)`.
+`seed`, `run_dir`, and `monitor` default to the graph's declarations. `run_dir` falls back to `GW_RUN_DIR` (a launcher's steer for undeclared graphs), then a hashed folder in `%TEMP%`. `namespace` defaults to the caller's module globals — which is how the expression namespace comes to be the definition module; override only when embedding. `RunResult`: `run_id`, `run_dir`, `trace_path`, `seed`, `reason`, `states`, `output_state(nid)`, `outputs(nid)`.
 
 A live run polls `control.json` in the run dir (~4×/s; `{"command": "pause"}` / `resume` / `stop`; a file already present at startup is stale and ignored — in-process, `Runtime` has `pause()`/`resume()`/`stop()`). Pause lets scripts and humans finish and halts each running LLM session politely, holding its invocation open; Resume completes that same invocation; Stop ends the run (`reason: stopped`). `resume_run` replays a crashed or abandoned run from its trace: the definition and seed must be unchanged (replayed draws are checked; mismatch raises `TraceReplayError`), restored outputs come back in their JSON trace forms, and invocations in flight at the crash re-run with their captured inputs.
 
@@ -294,9 +295,7 @@ The run directory: `trace.jsonl` (authoritative, append per event), `status.json
 
 | env var | effect |
 |---|---|
-| `GW_SEED` | default for `run(seed=None)` |
 | `GW_RUN_DIR` | run dir for a graph that declares none (the Monitor sets it to watch such a run) |
-| `GW_MONITOR` | `0` never launch the Monitor GUI, `1` force, a path = that exe, unset = auto when interactive |
 | `GW_HUMAN_AUTO` | JSON file `{"<node id>" or "*": {output: value}}`; answers human nodes, no shell |
 | `GW_HUMAN_SHELL` / `GW_HUMAN_SHELL_AUTO` | shell exe override / drive the real shell headlessly |
 | `GW_CODEX_EXEC` | `1` = legacy `codex exec` instead of app-server |
@@ -307,7 +306,7 @@ The run directory: `trace.jsonl` (authoritative, append per event), `status.json
 
 ```powershell
 python -m graph_workflow.gui validate mygraph.py
-$env:GW_SEED = "7"; $env:GW_MONITOR = "0"; python mygraph.py       # REASON: quiescent
+python mygraph.py                                                  # REASON: quiescent
 ```
 
 Then read the trace (`result.run_dir` names the folder): last event `run_end` with reason `quiescent`, the expected commits with `output_state: true` and `error: null`, no `warning` events, no literal `$name` in `prompts/*.txt`. Set `GW_HUMAN_AUTO` to get through human nodes unattended.
@@ -451,4 +450,4 @@ if __name__ == "__main__":
         print(nid, st.output_state, st.invocations)
 ```
 
-At any seed it quiesces: the loop exits by score or by exhausting `MAX_DRAFTS` (the escape hatch on `e_pub` keeps S3 reachable either way), S2 fires per its seeded draws, S4 only on approval. Verified at seed 7 with `GW_HUMAN_AUTO` = `{"H1": {"approved": true, "remarks": "ship it"}}`: 34 trace events, all six commits TRUE, S2 idle (its draw, 0.559, exceeds 0.35), zero warnings, `run_end` reason `quiescent`.
+At any seed it quiesces: the loop exits by score or by exhausting `MAX_DRAFTS` (the escape hatch on `e_pub` keeps S3 reachable either way), S2 fires per its seeded draws, S4 only on approval. Verified with `seed=7` declared and `GW_HUMAN_AUTO` = `{"H1": {"approved": true, "remarks": "ship it"}}`: 34 trace events, all six commits TRUE, S2 idle (its draw, 0.559, exceeds 0.35), zero warnings, `run_end` reason `quiescent`.
