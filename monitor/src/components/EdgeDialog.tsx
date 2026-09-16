@@ -234,6 +234,15 @@ export function GraphDialog(props: {
             hint="Template for new nodes' labels — %provider and %model substitute, with 1, 2, … appended for uniqueness. Already-assigned labels never change."
             onChange={editable ? (v) => set({ label_template: v || null }) : undefined}
           />
+          <TextField
+            label="Run directory"
+            value={model.run_dir ?? ""}
+            mono
+            readOnly={!editable}
+            placeholder="%TEMP%\<hash>"
+            hint="Absolute path the definition declares for its runs. Empty: the runtime creates a hashed folder in %TEMP%."
+            onChange={editable ? (v) => set({ run_dir: v || null }) : undefined}
+          />
         </div>
         <div className="subsection">
           <div className="section-title">Semaphores</div>

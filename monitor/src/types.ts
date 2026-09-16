@@ -76,6 +76,8 @@ export interface GraphModel {
   semaphores: Semaphores;
   pause_message: string | null;
   resume_message: string | null;
+  /** Absolute run directory the definition declares; null = runtime picks %TEMP%/<hash>. */
+  run_dir: string | null;
   nodes: NodeSpec[];
   edges: EdgeSpec[];
   /** Template for freshly created nodes' default labels (GUI-owned). */

@@ -416,13 +416,16 @@ export default function App() {
       let path = contract.path;
       if (!path || dirty) path = await doSave();
       if (!path) return;
-      // Run dirs live in local temp, never next to a possibly-synced graph
-      // file: sync clients briefly lock the interchange files mid-run.
+      // The definition's declared run dir wins; otherwise pick one in local
+      // temp, never next to a possibly-synced graph file: sync clients
+      // briefly lock the interchange files mid-run.
       const slug =
         contract.graph.name.replace(/[^A-Za-z0-9_-]+/g, "-").slice(0, 40) || "graph";
-      const rd = tempRuns
-        ? joinPath(tempRuns, `${slug}-${stamp()}`)
-        : joinPath(dirname(path), "runs", `gui-${stamp()}`);
+      const rd =
+        contract.graph.run_dir ||
+        (tempRuns
+          ? joinPath(tempRuns, `${slug}-${stamp()}`)
+          : joinPath(dirname(path), "runs", `gui-${stamp()}`));
       try {
         await spawnRun(path, rd, seed.trim() || null, joinPath(rd, "run.log"));
         setSelection(null);

@@ -12,8 +12,10 @@ when no node is ready and no node is running.
 from __future__ import annotations
 
 import copy
+import hashlib
 import os
 import queue
+import tempfile
 import threading
 import time
 from dataclasses import dataclass, field
@@ -110,9 +112,8 @@ class Runtime:
         else:
             warnings = []
         if seed is None and os.environ.get("GW_SEED"):
-            # GUI interchange: the Monitor sets GW_SEED/GW_RUN_DIR when it
-            # executes a definition, so defs that don't plumb them explicitly
-            # remain controllable. Explicit arguments always win.
+            # Launcher interchange: the Monitor sets GW_SEED when it executes
+            # a definition. Explicit arguments always win.
             try:
                 seed = int(os.environ["GW_SEED"])
             except ValueError:
@@ -129,11 +130,13 @@ class Runtime:
         else:
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             self.run_id = f"{_slug(graph.name)}-{stamp}-s{self.seed % 100000}"
+        # The definition declares its run directory; a launcher that needs to
+        # watch an undeclared run steers it with GW_RUN_DIR; else %TEMP%.
         if run_dir is None:
-            run_dir = os.environ.get("GW_RUN_DIR") or None
-        if run_dir is None:
-            base = Path(self.namespace.get("__file__", ".")).resolve().parent
-            run_dir = base / "runs" / self.run_id
+            run_dir = graph.run_dir or os.environ.get("GW_RUN_DIR") or (
+                Path(tempfile.gettempdir())
+                / hashlib.sha1(datetime.now().isoformat().encode()).hexdigest()[:16]
+            )
         self.run_dir = Path(run_dir)
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.trace_path = self.run_dir / "trace.jsonl"

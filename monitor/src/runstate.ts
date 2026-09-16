@@ -44,6 +44,7 @@ function graphFromTrace(g: any): GraphModel {
     semaphores: g?.semaphores ?? { script: 4, llm: 2, human: 1, providers: {} },
     pause_message: g?.pause_message ?? null,
     resume_message: g?.resume_message ?? null,
+    run_dir: g?.run_dir ?? null,
     nodes: (g?.nodes ?? []).map((n: any) => ({
       id: n.id,
       rank: n.rank,

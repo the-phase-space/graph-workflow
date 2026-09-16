@@ -244,6 +244,7 @@ def graph_to_contract(graph: Graph, namespace: dict) -> dict:
         "semaphores": graph.semaphores.to_json(),
         "pause_message": graph.pause_message,
         "resume_message": graph.resume_message,
+        "run_dir": graph.run_dir,
         "nodes": [node_to_contract(n, namespace) for n in graph.nodes_by_rank()],
         "edges": [
             {
@@ -503,6 +504,8 @@ def generate(contract: dict) -> str:
         graph_pairs.append(("pause_message", repr(g["pause_message"])))
     if g.get("resume_message"):
         graph_pairs.append(("resume_message", repr(g["resume_message"])))
+    if g.get("run_dir"):
+        graph_pairs.append(("run_dir", repr(g["run_dir"])))
     body.append(f"g = Graph({name!r}, {_kwargs(graph_pairs)})")
     body.append("")
 
@@ -623,13 +626,7 @@ def generate(contract: dict) -> str:
         "",
         *gui_section,
         'if __name__ == "__main__":',
-        "    import os",
-        "",
-        "    run(",
-        "        g,",
-        '        seed=int(os.environ["GW_SEED"]) if os.environ.get("GW_SEED") else None,',
-        '        run_dir=os.environ.get("GW_RUN_DIR") or None,',
-        "    )",
+        "    run(g)",
         "",
     ]
     return "\n".join(parts)
@@ -684,6 +681,7 @@ def template(name: str = "untitled") -> dict:
             "semaphores": Semaphores().to_json(),
             "pause_message": None,
             "resume_message": None,
+            "run_dir": None,
             "nodes": [],
             "edges": [],
         },

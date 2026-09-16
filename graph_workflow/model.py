@@ -491,9 +491,13 @@ class Graph:
         semaphores: Semaphores | None = None,
         pause_message: str | None = None,
         resume_message: str | None = None,
+        run_dir: str | None = None,
     ):
         self.name = str(name)
         self.semaphores = semaphores or Semaphores()
+        # Absolute path the graph declares for its runs; None lets the
+        # runtime pick a hashed folder under %TEMP%.
+        self.run_dir = run_dir
         self.generator = Generator()
         self.nodes: dict[str, Node] = {}
         self.edges: dict[str, Edge] = {}
@@ -562,6 +566,7 @@ class Graph:
             "edges": [e.to_json() for e in self.edges.values()],
             "pause_message": self.pause_message,
             "resume_message": self.resume_message,
+            "run_dir": self.run_dir,
         }
 
     def __repr__(self):
