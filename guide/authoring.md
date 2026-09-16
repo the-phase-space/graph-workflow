@@ -21,8 +21,7 @@ A definition is one executable Python file: topology declared as data, a run of 
 ```python
 from graph_workflow import Edge, Graph, ScriptNode, Semaphores, run
 
-g = Graph("my-graph", semaphores=Semaphores(script=4, llm=2, human=1),
-          run_dir=r"C:\Users\me\AppData\Local\Temp\gw-my-graph")
+g = Graph("my-graph", semaphores=Semaphores(script=4, llm=2, human=1))
 
 A = ScriptNode("A", rank=0, fn=lambda i: {"x": 21}, outputs={"x": int})
 B = ScriptNode("B", rank=1, fn=lambda i: {"y": i.x * 2},
@@ -38,7 +37,7 @@ if __name__ == "__main__":
     print("REASON:", result.reason)
 ```
 
-The guard is required — the validator and the Monitor GUI import definitions with `run()` intercepted — so module level must stay free of side effects beyond declarations. `run_dir` is the graph's declaration of where its runs live: an absolute path, taken as given. Omit it and the runtime creates a hashed folder in `%TEMP%`.
+The guard is required — the validator and the Monitor GUI import definitions with `run()` intercepted — so module level must stay free of side effects beyond declarations. `Graph(..., run_dir=...)` is the graph's declaration of where its runs live: an absolute path, taken as given, never inside a cloud-synced folder. Omit it, as here, and the runtime creates a hashed folder in `%TEMP%`.
 
 ## Execution
 
@@ -311,7 +310,7 @@ python -m graph_workflow.gui validate mygraph.py
 $env:GW_SEED = "7"; $env:GW_MONITOR = "0"; python mygraph.py       # REASON: quiescent
 ```
 
-Then read the trace (`result.run_dir` names the folder): last event `run_end` with reason `quiescent`, the expected commits with `output_state: true` and `error: null`, no `warning` events, no literal `$name` in `prompts/*.txt`. Declare run dirs outside cloud-synced folders; set `GW_HUMAN_AUTO` to get through human nodes unattended.
+Then read the trace (`result.run_dir` names the folder): last event `run_end` with reason `quiescent`, the expected commits with `output_state: true` and `error: null`, no `warning` events, no literal `$name` in `prompts/*.txt`. Set `GW_HUMAN_AUTO` to get through human nodes unattended.
 
 ## Policy
 
@@ -327,13 +326,15 @@ Every remaining construct, once: bounded LLM loop with alternation guard, conver
 ```python
 """Bounded draft/critique loop, stochastic audit, conditional publish, human approval."""
 
+import os
+
 from graph_workflow import (
     Edge, Gate, Graph, HumanNode, LLMNode, ScriptNode, Semaphores, isDefined, run,
 )
 
 MAX_DRAFTS = 3
 PASS_SCORE = 7
-RUN_DIR = r"C:\Users\me\AppData\Local\Temp\gw-pitch-loop"
+RUN_DIR = os.path.join(os.environ["LOCALAPPDATA"], "Temp", "gw-pitch-loop")
 
 
 def draft_prompt(i):
