@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "build:app": "powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1",
+    "build:app": "pwsh -NoProfile -File build.ps1",
     "tauri": "tauri"
   },
   "dependencies": {

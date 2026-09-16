@@ -1,3 +1,4 @@
+#Requires -Version 7.0
 # Build outside Dropbox, then install the completed Monitor beside its sources.
 # Keep frontendDist relative (../dist): Tauri parses a drive-qualified Windows
 # path as a URL and silently omits the embedded frontend assets.
@@ -87,10 +88,10 @@ finally {
     foreach ($monitor in $stoppedMonitors) {
         $arguments = $monitor.CommandLine -replace '^\s*(?:"[^"]+"|\S+)\s*', ''
         if ($arguments) {
-            Start-Process -FilePath $installedExe -ArgumentList $arguments -WindowStyle Hidden
+            Start-Process -FilePath $installedExe -ArgumentList $arguments -WindowStyle Normal
         }
         else {
-            Start-Process -FilePath $installedExe -WindowStyle Hidden
+            Start-Process -FilePath $installedExe -WindowStyle Normal
         }
     }
 }
