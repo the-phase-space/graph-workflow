@@ -58,6 +58,7 @@ export interface NodeSpec {
   timeout_s?: number | null;
   pause_message?: string | null;
   resume_message?: string | null;
+  persist_from?: string | null;
   parse_ref?: string | null;
   // human
   shell_cmd?: string | null;

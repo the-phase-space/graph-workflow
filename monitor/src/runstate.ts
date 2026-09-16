@@ -56,6 +56,7 @@ function graphFromTrace(g: any): GraphModel {
       model: n.model,
       effort: n.effort,
       prompt: n.prompt,
+      persist_from: n.persist_from,
     })),
     edges: (g?.edges ?? []).map((e: any) => ({
       id: e.id,

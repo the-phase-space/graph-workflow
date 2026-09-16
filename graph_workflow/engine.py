@@ -57,6 +57,9 @@ class NodeState:
     #: this for declared outputs the continue-reply doesn't restate.
     pause_text: str | None = None
     session_id: str | None = None
+    #: Session selected by persist_from at dispatch; None means no context
+    #: was available (including a self-persisting node's initial fresh turn).
+    persist_session_id: str | None = None
     proc: Any = None  # LiveInvocation (LLM) or Popen (human shell)
 
 
@@ -457,6 +460,7 @@ class Runtime:
         node = ns.decl
         self._sems_acquire(node)
         resumed = ns.paused_open
+        recovering = ns.rerun_pending
         ns.interrupt = False
         ns.rerun_pending = False
         ns.state = "running"
@@ -467,16 +471,27 @@ class Runtime:
             invocation = ns.invocations
             ns.open_invocation = invocation
             if node.type == "llm":
-                # Providers that assign their own session id (codex) get it
-                # parsed from output; fabricating one here would poison the
-                # pause/resume path if the invocation is interrupted early.
-                adapter = get_adapter(node.provider)
-                ns.session_id = (
-                    None
-                    if getattr(adapter, "provider_assigns_session", False)
-                    else runners.session_uuid(self.run_id, node.id, invocation)
-                )
-        self._emit("start", node=node.id, invocation=invocation, resumed=resumed)
+                # Bind at dispatch, before the source can start another
+                # invocation. Recovery keeps the binding from the trace.
+                if not recovering:
+                    ns.persist_session_id = (
+                        self.states[node.persist_from].session_id
+                        if node.persist_from is not None else None
+                    )
+                ns.session_id = ns.persist_session_id
+                if not ns.session_id and node.persist_from in (None, node.id):
+                    # Self-persistence bootstraps a session on its first turn.
+                    # Provider-assigned IDs (codex) must come from output.
+                    adapter = get_adapter(node.provider)
+                    ns.session_id = (
+                        None
+                        if getattr(adapter, "provider_assigns_session", False)
+                        else runners.session_uuid(self.run_id, node.id, invocation)
+                    )
+        self._emit("start", node=node.id, invocation=invocation, resumed=resumed,
+                   **({"session_id": ns.session_id,
+                       "persist_session_id": ns.persist_session_id}
+                      if node.type == "llm" else {}))
         threading.Thread(
             target=self._worker, args=(ns, resumed), daemon=True,
             name=f"gw-{node.id}#{invocation}",
@@ -505,11 +520,15 @@ class Runtime:
                     warn=warn,
                 )
             elif node.type == "llm":
+                if node.persist_from not in (None, node.id) and not ns.session_id:
+                    raise RuntimeError(
+                        f"persist_from={node.persist_from!r}: no session id available"
+                    )
                 status, outputs, metrics, error, ack_text = runners.run_llm(
                     node, inputs, run_id=self.run_id, run_dir=self.run_dir,
                     invocation=ns.open_invocation, register_proc=register_proc,
                     interrupted=lambda: ns.interrupt, warn=warn,
-                    resume_session=ns.session_id if resumed else None,
+                    resume_session=ns.session_id if resumed else ns.persist_session_id,
                     resume_message=(
                         self._resume_message(node) if resumed else None
                     ),
@@ -544,6 +563,8 @@ class Runtime:
                 outputs, metrics, error = {}, {}, f"unknown node type {node.type!r}"
         except Exception as exc:  # defensive: runner bugs must not hang the run
             outputs, metrics, error = {}, {}, f"runner crashed: {type(exc).__name__}: {exc}"
+            if node.type == "llm":
+                metrics["session_id"] = ns.session_id
         self._queue.put(("done", node.id, outputs, metrics, error))
 
     def _pause_message(self, node) -> str:
@@ -760,6 +781,9 @@ class Runtime:
                 ns.state = "running"
                 ns.invocations = max(ns.invocations, int(ev["invocation"]))
                 ns.open_invocation = int(ev["invocation"])
+                if "session_id" in ev:
+                    ns.session_id = ev["session_id"]
+                ns.persist_session_id = ev.get("persist_session_id")
             elif etype == "commit":
                 ns = self.states[nid]
                 ns.state = "idle"

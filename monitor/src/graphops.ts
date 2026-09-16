@@ -127,7 +127,12 @@ export function replaceNode(g: GraphModel, id: string, node: NodeSpec): GraphMod
   const renamed = node.id !== id;
   return {
     ...g,
-    nodes: g.nodes.map((n) => (n.id === id ? node : n)),
+    nodes: g.nodes.map((n) => {
+      const updated = n.id === id ? node : n;
+      return renamed && updated.persist_from === id
+        ? { ...updated, persist_from: node.id }
+        : updated;
+    }),
     edges: renamed
       ? g.edges.map((e) => ({
           ...e,

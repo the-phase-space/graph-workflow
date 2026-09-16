@@ -261,6 +261,15 @@ export default function NodeDialog(props: {
                   </div>
                 )}
                 <TextField
+                  label="Persist from"
+                  value={node.persist_from ?? ""}
+                  mono
+                  readOnly={ro}
+                  placeholder="node ID (blank = fresh session)"
+                  hint="Reuse an upstream session, or enter this node's own ID to keep its context in a loop"
+                  onChange={editable ? (v) => set({ persist_from: v.trim() || null }) : undefined}
+                />
+                <TextField
                   label="Settings file"
                   value={node.settings ?? ""}
                   mono

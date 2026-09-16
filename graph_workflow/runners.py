@@ -244,7 +244,9 @@ def _invoke_llm(node: LLMNode, prompt: str, *, resume_session: str | None,
         result.ok = False
         result.error = f"timed out after {timeout_s}s"
     if not result.session_id:
-        result.session_id = None if getattr(adapter, "provider_assigns_session", False) else session_id
+        result.session_id = resume_session or (
+            None if getattr(adapter, "provider_assigns_session", False) else session_id
+        )
     return result, handle
 
 
@@ -258,14 +260,14 @@ def run_llm(node: LLMNode, inputs: Inputs, *, run_id: str, run_dir, invocation: 
     or "interrupted_acked" (the halt message was steered into the live
     session and ``ack_text`` is the model's reply ending its following turn).
 
-    With ``resume_session`` set this is the Resume path completing a paused
-    invocation: the session-bound resume form carries ``resume_message`` and
-    the reply is the invocation's response; declared outputs missing from it
-    are also sought in ``pause_text`` (work the model emitted before the
-    pause landed).
+    ``resume_session`` sends the node's rendered prompt into an existing
+    context. When ``resume_message`` is also supplied, this instead completes
+    a paused invocation: the message replaces the prompt, and missing outputs
+    are also sought in ``pause_text`` (work emitted before the pause landed).
     """
     t0 = time.monotonic()
-    if resume_session:
+    paused_resume = bool(resume_session) and resume_message is not None
+    if paused_resume:
         prompt = resume_message or "continue"
         tag = "-resume"
     else:
@@ -291,7 +293,7 @@ def run_llm(node: LLMNode, inputs: Inputs, *, run_id: str, run_dir, invocation: 
             return "interrupted", {}, metrics, None, None
         # The invocation completed before the pause could act on it: commit.
     outputs = _llm_outputs(node, result, warn) if result.ok else {}
-    if resume_session and result.ok and pause_text:
+    if paused_resume and result.ok and pause_text:
         missing = [n for n in node.outputs if n != "response" and n not in outputs]
         if missing:
             data = extract_json_object(pause_text)

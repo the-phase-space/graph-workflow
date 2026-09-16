@@ -226,6 +226,7 @@ def node_to_contract(node: Node, namespace: dict) -> dict:
             timeout_s=node.timeout_s,
             pause_message=node.pause_message,
             resume_message=node.resume_message,
+            persist_from=node.persist_from,
         )
         if node.provider != "grok":
             d["model"] = node.model
@@ -534,7 +535,7 @@ def generate(contract: dict) -> str:
                 pairs.append(("prompt", n["prompt_ref"]))
             else:
                 raise ValueError(f"LLM node {nid!r}: no prompt to save")
-            for key in ("settings", "cwd", "pause_message", "resume_message"):
+            for key in ("settings", "cwd", "pause_message", "resume_message", "persist_from"):
                 if n.get(key):
                     pairs.append((key, repr(n[key])))
             if n.get("extra_args"):

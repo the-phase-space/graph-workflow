@@ -84,6 +84,33 @@ def validate(graph: Graph, namespace: dict | None = None) -> list[str]:
             elif nid not in node_ids:
                 errors.append(f"edge {edge.id!r}: unknown output node {nid!r}")
 
+    # -- persistent contexts: directed reachability only -------------------- #
+    successors: dict[str, set[str]] = {}
+    for edge in graph.edges.values():
+        for nid in edge.inputs:
+            successors.setdefault(nid, set()).update(edge.outputs)
+    for node in graph.nodes.values():
+        if not isinstance(node, LLMNode) or node.persist_from is None:
+            continue
+        source = node.persist_from
+        if source not in graph.nodes:
+            errors.append(f"LLM node {node.id!r}: persist_from references unknown node {source!r}")
+            continue
+        # Start with successors so even self-reference requires a real path.
+        pending = list(successors.get(source, ()))
+        seen: set[str] = set()
+        while pending:
+            nid = pending.pop()
+            if nid in seen:
+                continue
+            seen.add(nid)
+            pending.extend(successors.get(nid, set()) - seen)
+        if node.id not in seen:
+            errors.append(
+                f"LLM node {node.id!r}: persist_from requires a directed path "
+                f"from {source!r} to {node.id!r}"
+            )
+
     # -- generator / primary rule ------------------------------------------- #
     for node in graph.nodes.values():
         in_edges = graph.in_edges(node.id)

@@ -6,7 +6,7 @@ cases. When this file and the source disagree, the source wins — the runtime
 is small and readable: `graph_workflow/model.py` (declarations), `engine.py`
 (scheduling), `expressions.py` (gates), `runners.py` (node execution),
 `validation.py` (rejections), `providers/` (the CLIs). The definition at the
-end of this file exercises every construct and was verified by execution.
+end of this file illustrates the core constructs and was verified by execution.
 
 ## Where your priors mislead
 
@@ -170,14 +170,76 @@ a FALSE commit.
 LLMNode(id, rank, provider, model, prompt,
         effort=None, settings=None, cwd=None, extra_args=None,
         timeout_s=1800.0, parse=None,
-        pause_message=None, resume_message=None, **common)
+        pause_message=None, resume_message=None, persist_from=None, **common)
 ```
 
-One invocation = one fresh headless CLI session turn; the session persists
-provider-side and is re-entered only by Pause/Resume. Provider API-key env
-vars are stripped on purpose: the CLIs must be installed and logged in, and
-they run with permissions bypassed — `cwd` (default: the launching process's)
-is the agent's working directory and its blast radius.
+One invocation = one headless CLI turn, in a fresh session by default.
+`persist_from="A"` instead sends this node's rendered prompt into A's latest
+session, using the provider's resume mechanism (`--resume ID`, or Codex's
+thread resume). The session ID is bound when this invocation starts and
+recorded in the trace for recovery. No manual UUID wiring is needed:
+
+```python
+g = Graph("shared-context")
+A = LLMNode("A", rank=0, provider="claude", model="sonnet",
+            prompt="Draft a plan.", outputs={"response": str})
+B = LLMNode("B", rank=1, provider="claude", model="sonnet",
+            persist_from="A", prompt="Review the plan and improve it.",
+            outputs={"response": str})
+g.add_nodes(A, B)
+g.add_edges(Edge("start", g.generator, A), Edge("review", A, B))
+```
+
+The source may be several edges upstream, including across script or human
+nodes. Persistence can chain: C with `persist_from="B"` continues B's session.
+It shares the live session history; it does not fork a snapshot of A's reply.
+Each new invocation selects its source's latest session again. A node without
+`persist_from` still starts fresh on every invocation.
+
+For a loop where each agent keeps its own context, use self-reference:
+`persist_from="A"` on A and `persist_from="B"` on B. Each starts fresh when it
+has no session yet, then resumes its own session on later iterations. A
+directed cycle must lead back to each self-referencing node; a zero-edge path
+does not count. For example, these gates alternate three turns per agent:
+
+```python
+g = Graph("separate-contexts")
+
+def propose(inputs):
+    if not isDefined(inputs.response):
+        return "Propose an initial plan."
+    return f"Revise the plan using this critique:\n{inputs.response}"
+
+A = LLMNode("A", rank=0, provider="claude", model="sonnet",
+            persist_from="A", prompt=propose,
+            gate="(start or back) and A.invocations == B.commits and A.invocations < 3",
+            inputs={"response": str}, outputs={"response": str})
+B = LLMNode("B", rank=1, provider="claude", model="sonnet",
+            persist_from="B", prompt="Review this revision: $response",
+            gate="forward and B.invocations < A.commits",
+            inputs={"response": str}, outputs={"response": str})
+g.add_nodes(A, B)
+g.add_edges(Edge("start", g.generator, A), Edge("forward", A, B),
+            Edge("back", B, A))
+```
+
+Each agent remembers its own turns; ordinary graph inputs deliver the other
+agent's latest reply. A's prompt handles the missing input on its first turn.
+
+Validation checks only that the source node exists and a directed path leads
+from it to this node. It ignores gates, provider/login compatibility, and
+concurrent session use; cycles are allowed. Authors must arrange for an LLM
+source to have a session available, use a provider/login that can resume it,
+and order turns as needed. A missing session on another node means an
+invocation error; only self-reference bootstraps a fresh context. This
+declaration adds no edges or scheduling constraints. Pause/Resume still
+completes the same invocation in its bound session with `resume_message`;
+ordinary persistence uses `prompt`.
+The Monitor's LLM node dialog exposes the same field as **Persist from**.
+
+Provider API-key env vars are stripped on purpose: the CLIs must be installed
+and logged in, and they run with permissions bypassed — `cwd` (default: the
+launching process's) is the agent's working directory and its blast radius.
 
 `prompt` is a `string.Template` string — `$name` substitutes the captured
 input, non-strings JSON-encoded, `$$` a literal `$`, and a name never
@@ -483,7 +545,8 @@ intercepted and prints `{"ok": true, "errors": [], "warnings": []}` when
 clean. Errors are structural: duplicate ranks, node/edge id collisions,
 output names on the reserved-metrics list, unknown endpoints, anything
 upstream of the Generator, a Generator-fed-only node declaring inputs, an
-input no upstream output could supply, expression syntax errors,
+input no upstream output could supply, a `persist_from` reference without a
+directed path from its source, expression syntax errors,
 `p_invocation` out of range, unknown provider or missing model/prompt.
 Warnings are curatorial: no in-edges, unresolvable names in expressions,
 semaphores for unknown providers, shadowed module names. What validation

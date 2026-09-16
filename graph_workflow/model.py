@@ -323,6 +323,11 @@ class LLMNode(Node):
     ``prompt`` is a ``string.Template``-style string (``$name`` placeholders
     substitute captured inputs) or a callable ``prompt(inputs) -> str``.
 
+    ``persist_from`` names an upstream node whose latest session receives
+    this node's prompt. Omit it to start a fresh session on every invocation.
+    In a cycle, reference this node's own id to retain its own context;
+    self-reference starts fresh when no session exists yet.
+
     Declared outputs beyond ``response`` (the raw reply text) are extracted
     from the last JSON object found in the reply, unless ``parse`` — a
     callable ``parse(text, result) -> dict`` — is given.
@@ -345,6 +350,7 @@ class LLMNode(Node):
         parse: Callable | None = None,
         pause_message: str | None = None,
         resume_message: str | None = None,
+        persist_from: str | None = None,
         **kwargs,
     ):
         super().__init__(id, rank, **kwargs)
@@ -359,6 +365,10 @@ class LLMNode(Node):
         self.parse = parse
         self.pause_message = pause_message
         self.resume_message = resume_message
+        self.persist_from = (
+            _require_identifier(persist_from, f"LLM node {id!r}: persist_from")
+            if persist_from is not None else None
+        )
 
     def to_json(self):
         d = super().to_json()
@@ -366,6 +376,7 @@ class LLMNode(Node):
             provider=self.provider,
             effort=self.effort,
             prompt=self.prompt if isinstance(self.prompt, str) else repr(self.prompt),
+            persist_from=self.persist_from,
         )
         if self.provider != "grok":
             d["model"] = self.model
