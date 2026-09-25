@@ -21,6 +21,7 @@ import {
   GEN_W,
   resolveOverlap,
   type EdgeGeometry,
+  type NodeMode,
   type Rect,
 } from "../layout";
 import { nodeLiveTokens, visualState, type RunState, type VisualState } from "../runstate";
@@ -82,23 +83,42 @@ const GLOW: Record<VisualState, string | null> = {
   idle: null,
 };
 
+// Material Symbols "collapse_content" / "expand_content" (viewBox 0 -960 960 960).
+const COLLAPSE_ICON = "M447-447v253h-73v-180H194v-73h253Zm140-320v180h180v73H514v-253h73Z";
+const EXPAND_ICON = "M194-194v-253h73v180h180v73H194Zm500-320v-180H514v-73h253v253h-73Z";
+
+/** Glow geometry per node mode: the compact bar gets a much tighter halo,
+ * with the filter region widened relative to its narrow face. */
+const GLOW_GEOMETRY: Record<
+  NodeMode,
+  { region: { x: string; y: string; w: string; h: string }; dilate: number; near: number; far: number }
+> = {
+  expanded: { region: { x: "-50%", y: "-130%", w: "200%", h: "360%" }, dilate: 1.5, near: 5.5, far: 14 },
+  compact: { region: { x: "-90%", y: "-35%", w: "280%", h: "170%" }, dilate: 1, near: 2, far: 5 },
+};
+
+function glowId(mode: NodeMode, state: VisualState): string {
+  return mode === "compact" ? `glow-compact-${state}` : `glow-${state}`;
+}
+
 /** Photoshop-style outer glow: the halo exists strictly outside the node's
  * silhouette — the blurred shape is composited `out` against the source
  * alpha, so a translucent node face is never tinted from behind. */
-function OuterGlowFilter(props: { id: string; color: string }) {
+function OuterGlowFilter(props: { id: string; color: string; mode: NodeMode }) {
+  const geo = GLOW_GEOMETRY[props.mode];
   return (
-    <filter id={props.id} x="-50%" y="-130%" width="200%" height="360%">
+    <filter id={props.id} x={geo.region.x} y={geo.region.y} width={geo.region.w} height={geo.region.h}>
       {/* Harden the translucent face to a solid silhouette first, so the
           interior punch-out removes the halo completely. */}
       <feComponentTransfer in="SourceAlpha" result="solid">
         <feFuncA type="linear" slope="40" intercept="0" />
       </feComponentTransfer>
-      <feMorphology in="solid" operator="dilate" radius="1.5" result="dil" />
-      <feGaussianBlur in="dil" stdDeviation="5.5" result="blurNear" />
+      <feMorphology in="solid" operator="dilate" radius={geo.dilate} result="dil" />
+      <feGaussianBlur in="dil" stdDeviation={geo.near} result="blurNear" />
       <feComposite in="blurNear" in2="solid" operator="out" result="ringNear" />
       <feFlood floodColor={props.color} floodOpacity="0.95" result="colNear" />
       <feComposite in="colNear" in2="ringNear" operator="in" result="glowNear" />
-      <feGaussianBlur in="dil" stdDeviation="14" result="blurFar" />
+      <feGaussianBlur in="dil" stdDeviation={geo.far} result="blurFar" />
       <feComposite in="blurFar" in2="solid" operator="out" result="ringFar" />
       <feFlood floodColor={props.color} floodOpacity="0.6" result="colFar" />
       <feComposite in="colFar" in2="ringFar" operator="in" result="glowFar" />
@@ -168,8 +188,11 @@ export default function Canvas(props: {
   // anchored where it picked the node up.
   const nodeDrag = useRef<{ id: string; dx: number; dy: number } | null>(null);
   const fittedFor = useRef<string>("");
+  // Node display mode; the toggle sits beside the fit-to-view control.
+  const [nodeMode, setNodeMode] = useState<NodeMode>("expanded");
+  const compact = nodeMode === "compact";
 
-  const layout = useMemo(() => computeLayout(model), [model]);
+  const layout = useMemo(() => computeLayout(model, nodeMode), [model, nodeMode]);
   const geoms = useMemo(
     () =>
       model.edges
@@ -210,16 +233,17 @@ export default function Canvas(props: {
 
   // The default viewport shows the whole graph: fit when a graph first
   // arrives (once the holder has real dimensions) or its topology changes
-  // identity. Never on geometry changes — the view must hold still through
-  // window and inspector resizes; zoom belongs to the user alone.
+  // identity, or the node display mode flips (the bbox changes wholesale).
+  // Never on geometry changes — the view must hold still through window and
+  // inspector resizes; zoom belongs to the user alone.
   useEffect(() => {
     if (!size.w || !size.h) return;
-    const key = `${model.name}|${model.nodes.length}|${model.edges.length}`;
+    const key = `${model.name}|${model.nodes.length}|${model.edges.length}|${nodeMode}`;
     if (fittedFor.current !== key) {
       fittedFor.current = key;
       fit();
     }
-  }, [model, size, fit]);
+  }, [model, size, fit, nodeMode]);
 
   const onWheel = (e: React.WheelEvent) => {
     e.preventDefault();
@@ -489,10 +513,17 @@ export default function Canvas(props: {
     >
       <svg width={size.w} height={size.h} className="canvas-svg">
         <defs>
-          {Object.entries(GLOW).map(([state, color]) =>
-            color ? (
-              <OuterGlowFilter key={state} id={`glow-${state}`} color={color} />
-            ) : null,
+          {(["expanded", "compact"] as NodeMode[]).flatMap((mode) =>
+            Object.entries(GLOW).map(([state, color]) =>
+              color ? (
+                <OuterGlowFilter
+                  key={`${mode}-${state}`}
+                  id={glowId(mode, state as VisualState)}
+                  color={color}
+                  mode={mode}
+                />
+              ) : null,
+            ),
           )}
         </defs>
         <g transform={`translate(${view.tx} ${view.ty}) scale(${view.scale})`}>
@@ -524,7 +555,7 @@ export default function Canvas(props: {
               <g
                 key={n.id}
                 className="node"
-                filter={glow ? `url(#glow-${vs})` : undefined}
+                filter={glow ? `url(#${glowId(nodeMode, vs)})` : undefined}
                 onMouseDown={
                   onSetPos
                     ? (e) => {
@@ -573,28 +604,32 @@ export default function Canvas(props: {
                   y={r.y}
                   width={r.w}
                   height={r.h}
-                  rx={11}
+                  rx={compact ? 6 : 11}
                   fill={nodeFill(n)}
                   className={"node-rect" + (isSel ? " selected" : "")}
                   strokeDasharray={vs === "paused" ? "7 5" : undefined}
                 />
-                <text x={r.x + r.w / 2} y={r.y + 24} className="node-name" textAnchor="middle">
-                  {fitText(label, r.w - 22, LABEL_FONT)}
-                </text>
-                <text x={r.x + 12} y={r.y + r.h - 12} className="node-sub" textAnchor="start">
-                  {fitText(
-                    n.type === "llm"
-                      ? run
-                        ? `${fmtTokens(tokens)} tok`
-                        : modelAlias(n.model, n.provider)
-                      : run && rt?.commits
-                        ? `${rt.commits}×`
-                        : "",
-                    r.w - 24,
-                    SUB_FONT,
-                  )}
-                </text>
-                {label !== n.id && timer == null && (
+                {!compact && (
+                  <text x={r.x + r.w / 2} y={r.y + 24} className="node-name" textAnchor="middle">
+                    {fitText(label, r.w - 22, LABEL_FONT)}
+                  </text>
+                )}
+                {!compact && (
+                  <text x={r.x + 12} y={r.y + r.h - 12} className="node-sub" textAnchor="start">
+                    {fitText(
+                      n.type === "llm"
+                        ? run
+                          ? `${fmtTokens(tokens)} tok`
+                          : modelAlias(n.model, n.provider)
+                        : run && rt?.commits
+                          ? `${rt.commits}×`
+                          : "",
+                      r.w - 24,
+                      SUB_FONT,
+                    )}
+                  </text>
+                )}
+                {!compact && label !== n.id && timer == null && (
                   <text
                     x={r.x + r.w - 10}
                     y={r.y + r.h - 12}
@@ -604,7 +639,7 @@ export default function Canvas(props: {
                     {fitText(n.id, 64, ID_BADGE_FONT)}
                   </text>
                 )}
-                {timer != null && (
+                {!compact && timer != null && (
                   <text
                     x={r.x + r.w - 12}
                     y={r.y + r.h - 12}
@@ -657,6 +692,18 @@ export default function Canvas(props: {
         }}
       >
         ⛶
+      </button>
+      <button
+        className="node-mode-btn"
+        title={compact ? "Expand nodes" : "Collapse nodes"}
+        onClick={(e) => {
+          e.stopPropagation();
+          setNodeMode((m) => (m === "compact" ? "expanded" : "compact"));
+        }}
+      >
+        <svg viewBox="0 -960 960 960" width="19" height="19" fill="currentColor" aria-hidden="true">
+          <path d={compact ? EXPAND_ICON : COLLAPSE_ICON} />
+        </svg>
       </button>
       {onResetLayout && (
         <button

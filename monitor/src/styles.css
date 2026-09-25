@@ -445,10 +445,24 @@ button.stop-btn {
   box-shadow: var(--shadow);
 }
 
+.node-mode-btn {
+  position: absolute;
+  top: 12px;
+  right: 54px;
+  display: flex;
+  align-items: center;
+  padding: 5px 8px;
+  box-shadow: var(--shadow);
+}
+
+.node-mode-btn svg {
+  display: block;
+}
+
 .reset-layout-btn {
   position: absolute;
   top: 12px;
-  right: 56px;
+  right: 98px;
   font-size: 12.5px;
   padding: 7px 12px;
   box-shadow: var(--shadow);

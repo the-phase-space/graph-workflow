@@ -13,12 +13,18 @@ export interface Rect {
   h: number;
 }
 
-export const NODE_W = 184;
 export const NODE_H = 66;
 export const GEN_W = 96;
 export const GEN_H = 38;
-const GAP_X = 56;
 const GAP_Y = 118;
+
+/** Node display modes: expanded faces carry text; compact faces are textless
+ * vertical bars packed tightly, for graphs with very wide layers. */
+export type NodeMode = "expanded" | "compact";
+export const NODE_METRICS: Record<NodeMode, { w: number; gapX: number }> = {
+  expanded: { w: 118, gapX: 56 },
+  compact: { w: 24, gapX: 7 },
+};
 
 export interface Layout {
   rects: Map<string, Rect>;
@@ -71,7 +77,8 @@ function backPairs(ids: string[], pairs: Pair[]): Set<Pair> {
   return back;
 }
 
-export function computeLayout(model: GraphModel): Layout {
+export function computeLayout(model: GraphModel, mode: NodeMode = "expanded"): Layout {
+  const { w: NODE_W, gapX: GAP_X } = NODE_METRICS[mode];
   const ids = [GEN, ...model.nodes.map((n) => n.id)];
   const pairs = pairsOf(model.edges).filter(
     (p) => ids.includes(p.from) && ids.includes(p.to) && p.to !== GEN,
