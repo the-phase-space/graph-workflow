@@ -642,13 +642,13 @@ button.stop-btn {
 .edge-path {
   fill: none;
   stroke: var(--edge);
-  stroke-width: 2.27;
+  stroke-width: 1.7;
   stroke-linecap: round;
 }
 
 .edge-path.selected {
   stroke: var(--accent);
-  stroke-width: 2.8;
+  stroke-width: 2.1;
 }
 
 /* Dynamic edge connector ('e' on a selected node): a half-opacity edge glued
@@ -664,7 +664,7 @@ button.stop-btn {
 
 .edge-path.link-preview {
   opacity: 0.5;
-  stroke-dasharray: 9 7;
+  stroke-dasharray: 4.5 3.5;
 }
 
 .link-preview-dot {

@@ -904,7 +904,7 @@ function EdgePaths(props: {
         <circle
           cx={geom.junction.x}
           cy={geom.junction.y}
-          r={5}
+          r={2.5}
           className={"edge-junction" + (selected ? " selected" : "")}
         />
       )}
@@ -912,7 +912,7 @@ function EdgePaths(props: {
         s.arrows.map((a, j) => (
           <polygon
             key={`${i}-${j}`}
-            points="0,-5.5 11,0 0,5.5"
+            points="0,-2.75 5.5,0 0,2.75"
             transform={`translate(${a.x} ${a.y}) rotate(${a.angle})`}
             className={
               (s.golden ? "edge-arrow golden" : "edge-arrow") + (selected ? " selected" : "")
