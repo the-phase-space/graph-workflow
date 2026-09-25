@@ -642,13 +642,13 @@ button.stop-btn {
 .edge-path {
   fill: none;
   stroke: var(--edge);
-  stroke-width: 3.4;
+  stroke-width: 2.27;
   stroke-linecap: round;
 }
 
 .edge-path.selected {
   stroke: var(--accent);
-  stroke-width: 4.2;
+  stroke-width: 2.8;
 }
 
 /* Dynamic edge connector ('e' on a selected node): a half-opacity edge glued
