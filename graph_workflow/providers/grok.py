@@ -1,4 +1,4 @@
-"""Grok provider adapter (``grok``), using the CLI's default model.
+"""Grok provider adapter (``grok``), pinned to ``grok-4.6``.
 Prompts are passed via ``--prompt-file``;
 the ``max`` reasoning effort is converted to ``xhigh``."""
 
@@ -21,6 +21,7 @@ class GrokAdapter(ProviderAdapter):
 
     def _common(self, node, cwd, prompt_file) -> list[str]:
         argv = ["--prompt-file", prompt_file, "--yolo", "--no-auto-update"]
+        argv += ["--model", "grok-4.6"]  # always explicit; never the CLI's default
         argv += ["--cwd", cwd]
         if node.effort:
             argv += ["--reasoning-effort", _EFFORT_MAP.get(node.effort, node.effort)]

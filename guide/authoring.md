@@ -197,7 +197,7 @@ A model handed an empty tool set may still emit tool-call markup as plain text; 
 | `claude` | Sonnet | `sonnet` | `low`, `medium`, `high`, `xhigh`, `max`, `ultracode` |
 | `claude` | Opus | `opus` | `low`, `medium`, `high`, `xhigh`, `max`, `ultracode` |
 | `claude` | Fable | `fable` | `low`, `medium`, `high`, `xhigh`, `max`, `ultracode` |
-| `grok` | CLI default | None; omit `--model` | `low`, `medium`, `high`, `xhigh` |
+| `grok` | Grok 4.6 | None; omit `model` | `low`, `medium`, `high`, `xhigh` |
 | `codex` | Luna | `gpt-5.6-luna` | `low`, `medium`, `high`, `xhigh`, `max` |
 | `codex` | Terra | `gpt-5.6-terra` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
 | `codex` | Sol | `gpt-5.6-sol` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |

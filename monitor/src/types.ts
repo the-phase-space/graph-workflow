@@ -232,7 +232,6 @@ export const PROVIDER_MODELS: Record<string, ModelOption[]> = {
   codex: CODEX_MODELS,
   codexb: CODEX_MODELS,
   grok: [
-    { alias: "Grok 4.5", id: "grok-4.5", efforts: GROK_EFFORTS },
     { alias: "Grok 4.6", id: "grok-4.6", efforts: GROK_EFFORTS },
   ],
 };

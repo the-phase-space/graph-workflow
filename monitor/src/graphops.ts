@@ -97,7 +97,7 @@ export function makeNode(g: GraphModel, type: NodeType, provider?: string): Node
             ...common,
             type: "llm",
             provider: p,
-            model: p.startsWith("codex") ? "gpt-5.6-luna" : p === "grok" ? "grok-4.5" : "sonnet",
+            model: p.startsWith("codex") ? "gpt-5.6-luna" : p === "grok" ? "grok-4.6" : "sonnet",
             effort: "medium",
             prompt: "",
             outputs: { response: "str" },
