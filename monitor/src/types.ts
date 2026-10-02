@@ -221,9 +221,9 @@ const CLAUDE_MODELS: ModelOption[] = [
   { alias: "Haiku", id: "haiku", efforts: [] },
 ];
 const CODEX_MODELS: ModelOption[] = [
-  { alias: "Luna", id: "gpt-5.6-luna", efforts: BASE_EFFORTS },
+  { alias: "Luna", id: "gpt-6-luna", efforts: BASE_EFFORTS },
   { alias: "Terra", id: "gpt-5.6-terra", efforts: CODEX_ULTRA_EFFORTS },
-  { alias: "Sol", id: "gpt-5.6-sol", efforts: CODEX_ULTRA_EFFORTS },
+  { alias: "Sol", id: "gpt-6.1-sol", efforts: CODEX_ULTRA_EFFORTS },
   { alias: "Astra", id: "gpt-6-astra", efforts: CODEX_ULTRA_EFFORTS },
 ];
 export const PROVIDER_MODELS: Record<string, ModelOption[]> = {

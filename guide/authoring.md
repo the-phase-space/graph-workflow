@@ -198,9 +198,9 @@ A model handed an empty tool set may still emit tool-call markup as plain text; 
 | `claude` | Opus | `opus` | `low`, `medium`, `high`, `xhigh`, `max`, `ultracode` |
 | `claude` | Fable | `fable` | `low`, `medium`, `high`, `xhigh`, `max`, `ultracode` |
 | `grok` | Grok 4.6 | None; omit `model` | `low`, `medium`, `high`, `xhigh` |
-| `codex` | Luna | `gpt-5.6-luna` | `low`, `medium`, `high`, `xhigh`, `max` |
+| `codex` | Luna | `gpt-6-luna` | `low`, `medium`, `high`, `xhigh`, `max` |
 | `codex` | Terra | `gpt-5.6-terra` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
-| `codex` | Sol | `gpt-5.6-sol` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
+| `codex` | Sol | `gpt-6.1-sol` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
 | `codex` | Astra | `gpt-6-astra` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
 
 The table, not `claude --help`, is the accepted set: `ultracode` is absent from the help text yet accepted by `--effort`, verified by execution, and required whenever a Claude node is meant to achieve its task by running a dynamic multi-agent workflow.
