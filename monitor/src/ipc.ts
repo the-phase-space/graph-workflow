@@ -3,7 +3,7 @@
 // authoring semantics; the frontend never derives graph semantics itself.
 
 import { invoke } from "@tauri-apps/api/core";
-import type { Contract } from "./types";
+import type { Contract, GraphModel } from "./types";
 
 export interface EnvInfo {
   args: string[];
@@ -102,6 +102,11 @@ export const saveGraph = (path: string, contract: Contract, force: boolean) =>
 
 export const templateGraph = (name: string) =>
   backend<LoadResult>(["template", name]);
+
+export const deleteGraphElement = (graph: GraphModel, kind: "node" | "edge", id: string) =>
+  backend<{ ok: true; graph: GraphModel } | BackendError>(
+    ["delete", kind, id], JSON.stringify(graph),
+  );
 
 export function isBackendError(r: LoadResult): r is BackendError {
   return !(r as Contract).ok;

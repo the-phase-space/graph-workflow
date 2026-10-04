@@ -317,6 +317,7 @@ Then read the trace (`result.run_dir` names the folder): last event `run_end` wi
 - Topology is static; there is no dynamic node spawning. Collections: iterate inside one script node, unroll a known N into parallel nodes, or ride the payload around a bounded cycle.
 - Every quiescence path is designed: loop bounds, branch escape hatches whose constants match the bounds they answer, `max_commits` as backstop.
 - Keep script fns and prompt callables as named module-level defs. The Monitor also preserves callable expressions in direct module-level node constructors, including `parse=capture("answer")`, partials, and inline lambdas. A callable created inside a loop or function needs its own surviving module-level binding for GUI saves; otherwise the Monitor names the node and callable it cannot save. In a GUI-saved file, hand-edit only the `# --- gw:helpers ---` section; `# --- gw:graph ---` is regenerated wholesale on every GUI save, and `# --- gw:gui ---` is display metadata the runtime ignores.
+- Monitor deletion removes Boolean gate predicates that depend on the deleted node, including terms for edges emptied by deletion. It preserves remaining `and`/`or`/`not` structure and restores the native default when no predicates remain. A predicate mixing deleted and surviving runtime bindings, or creating a variable binding, requires an explicit edit first. Deletion and gate cleanup undo together. Declared data inputs and their consuming code still need review when a supplier is removed.
 
 ## A full definition
 

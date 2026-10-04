@@ -152,35 +152,8 @@ function renameKey(gates: Record<string, GateSpec>, from: string, to: string) {
   return out;
 }
 
-export function deleteNode(g: GraphModel, id: string): GraphModel {
-  return {
-    ...g,
-    nodes: g.nodes.filter((n) => n.id !== id),
-    edges: g.edges
-      .map((e) => ({
-        ...e,
-        inputs: e.inputs.filter((x) => x !== id),
-        outputs: e.outputs.filter((x) => x !== id),
-        input_gates: omitKey(e.input_gates, id),
-        output_gates: omitKey(e.output_gates, id),
-      }))
-      .filter((e) => e.inputs.length > 0 && e.outputs.length > 0),
-  };
-}
-
-function omitKey(gates: Record<string, GateSpec>, key: string) {
-  if (!(key in gates)) return gates;
-  const out = { ...gates };
-  delete out[key];
-  return out;
-}
-
 export function replaceEdge(g: GraphModel, id: string, edge: EdgeSpec): GraphModel {
   return { ...g, edges: g.edges.map((e) => (e.id === id ? edge : e)) };
-}
-
-export function deleteEdge(g: GraphModel, id: string): GraphModel {
-  return { ...g, edges: g.edges.filter((e) => e.id !== id) };
 }
 
 export function addNode(g: GraphModel, node: NodeSpec): GraphModel {

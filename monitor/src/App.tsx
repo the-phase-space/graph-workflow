@@ -15,8 +15,6 @@ import Sidebar, { type ValidationReport } from "./components/Sidebar";
 import {
   addEdge,
   addNode,
-  deleteEdge,
-  deleteNode,
   makeEdge,
   makeNode,
   replaceEdge,
@@ -24,6 +22,7 @@ import {
 } from "./graphops";
 import {
   controlRun,
+  deleteGraphElement,
   dirname,
   envInfo,
   isBackendError,
@@ -136,6 +135,7 @@ export default function App() {
   const pastRef = useRef<Contract[]>([]);
   const futureRef = useRef<Contract[]>([]);
   const lastEditRef = useRef<{ key: string; ts: number } | null>(null);
+  const pendingDeletionRef = useRef<Promise<void> | null>(null);
 
   const resetHistory = useCallback(() => {
     pastRef.current = [];
@@ -267,6 +267,36 @@ export default function App() {
     setDirty(true);
   }, []);
 
+  const doDelete = useCallback((kind: "node" | "edge", id: string) => {
+    const current = contractRef.current;
+    if (!current || pendingDeletionRef.current || busy) return;
+    const task = (async () => {
+      setBusy("Deleting and updating gates…");
+      try {
+        const result = await deleteGraphElement(current.graph, kind, id);
+        if (!result.ok) {
+          report(`Delete failed: ${result.error}`);
+          return;
+        }
+        if (contractRef.current !== current) {
+          report("The graph changed while deleting. Please retry the deletion.");
+          return;
+        }
+        mutate((c) => ({ ...c, graph: result.graph }));
+        setSelection(null);
+        setValidation(null);
+      } catch (e) {
+        report(`Delete failed: ${String(e)}`);
+      } finally {
+        setBusy(null);
+      }
+    })();
+    pendingDeletionRef.current = task;
+    void task.finally(() => {
+      if (pendingDeletionRef.current === task) pendingDeletionRef.current = null;
+    });
+  }, [busy, mutate, report]);
+
   const undo = useCallback(() => {
     const cur = contractRef.current;
     const prev = pastRef.current.pop();
@@ -324,10 +354,12 @@ export default function App() {
 
   const doSaveTo = useCallback(
     async (path: string, force: boolean): Promise<string | null> => {
-      if (!contract) return null;
+      await pendingDeletionRef.current;
+      const current = contractRef.current;
+      if (!current) return null;
       setBusy("Saving…");
       try {
-        const result = await saveGraph(path, contract, force);
+        const result = await saveGraph(path, current, force);
         if (isBackendError(result)) {
           report(`Save failed: ${result.error}`);
           return null;
@@ -503,7 +535,7 @@ export default function App() {
   // -- render ------------------------------------------------------------- //
 
   const model = mode === "exec" ? execModel : contract?.graph ?? null;
-  const editable = mode === "build";
+  const editable = mode === "build" && !busy;
   const helpers = contract?.helpers ?? "";
 
   // The canvas sees the session's manual positions overlaid; everything else
@@ -542,10 +574,7 @@ export default function App() {
             return { ...c, graph: replaceNode(c.graph, selectedNode.id, n) };
           }, `insp:node:${selectedNode.id}`)
         }
-        onDelete={() => {
-          setSelection(null);
-          mutate((c) => ({ ...c, graph: deleteNode(c.graph, selectedNode.id) }));
-        }}
+        onDelete={() => doDelete("node", selectedNode.id)}
         onClose={() => setSelection(null)}
       />
     ) : selectedEdge && model ? (
@@ -559,10 +588,7 @@ export default function App() {
             return { ...c, graph: replaceEdge(c.graph, selectedEdge.id, e) };
           }, `insp:edge:${selectedEdge.id}`)
         }
-        onDelete={() => {
-          setSelection(null);
-          mutate((c) => ({ ...c, graph: deleteEdge(c.graph, selectedEdge.id) }));
-        }}
+        onDelete={() => doDelete("edge", selectedEdge.id)}
         onClose={() => setSelection(null)}
       />
     ) : selection?.kind === "generator" ? (

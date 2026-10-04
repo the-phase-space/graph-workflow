@@ -8,6 +8,7 @@ invoked by the Monitor GUI as a CLI::
     python -m graph_workflow.gui load <graphdef.py>      # -> contract JSON
     python -m graph_workflow.gui validate <graphdef.py>  # -> {ok, errors, warnings}
     python -m graph_workflow.gui save <graphdef.py>      # contract JSON on stdin
+    python -m graph_workflow.gui delete node|edge <id>   # graph JSON on stdin
     python -m graph_workflow.gui template [name]         # -> fresh contract
 
 Loading *executes* the graph definition (the file is the entry point and
@@ -52,6 +53,7 @@ from .model import (
     Semaphores,
 )
 from .errors import GraphValidationError
+from .editing import delete_element
 from .providers import known_providers
 from .validation import validate
 
@@ -865,7 +867,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     if not argv:
-        return out({"ok": False, "error": "usage: gui load|validate|save|template ..."})
+        return out({"ok": False, "error": "usage: gui load|validate|save|delete|template ..."})
     cmd, args = argv[0], argv[1:]
     try:
         if cmd == "load":
@@ -884,6 +886,11 @@ def main(argv: list[str] | None = None) -> int:
             target = [a for a in args if not a.startswith("--")][0]
             contract = json.loads(sys.stdin.buffer.read().decode("utf-8"))
             return out(save_contract(target, contract, force=force))
+        if cmd == "delete":
+            if len(args) != 2 or args[0] not in {"node", "edge"}:
+                raise ValueError("usage: gui delete node|edge <id> (graph JSON on stdin)")
+            graph = json.loads(sys.stdin.buffer.read().decode("utf-8"))
+            return out({"ok": True, "graph": delete_element(graph, args[0], args[1])})
         if cmd == "template":
             return out(template(args[0] if args else "untitled"))
         return out({"ok": False, "error": f"unknown command {cmd!r}"})
