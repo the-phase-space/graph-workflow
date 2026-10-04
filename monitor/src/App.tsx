@@ -401,6 +401,23 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Delete") {
+        if (
+          mode !== "build" || busy || selection?.kind !== "node" ||
+          e.defaultPrevented || e.isComposing || e.repeat ||
+          e.ctrlKey || e.metaKey || e.altKey || e.shiftKey
+        ) return;
+        // Delete belongs to the focused editor while entering text.
+        const target = document.activeElement;
+        if (
+          target instanceof HTMLElement &&
+          (target.tagName === "INPUT" || target.tagName === "TEXTAREA" ||
+            target.tagName === "SELECT" || target.isContentEditable)
+        ) return;
+        e.preventDefault();
+        doDelete("node", selection.id);
+        return;
+      }
       if (!(e.ctrlKey || e.metaKey)) return;
       const k = e.key.toLowerCase();
       if (k === "s") {
@@ -420,7 +437,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [mode, doSave, doSaveAs, undo, redo]);
+  }, [mode, busy, selection, doDelete, doSave, doSaveAs, undo, redo]);
 
   const doValidate = useCallback(async () => {
     if (!contract) return;

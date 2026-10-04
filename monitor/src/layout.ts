@@ -22,7 +22,7 @@ const GAP_Y = 118;
  * vertical bars packed tightly, for graphs with very wide layers. */
 export type NodeMode = "expanded" | "compact";
 export const NODE_METRICS: Record<NodeMode, { w: number; gapX: number }> = {
-  expanded: { w: 118, gapX: 56 },
+  expanded: { w: 118, gapX: 28 },
   compact: { w: 24, gapX: 7 },
 };
 
