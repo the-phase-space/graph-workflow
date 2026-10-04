@@ -95,7 +95,7 @@ ScriptNode(id, rank, fn, **common)
 ```python
 LLMNode(id, rank, provider, model, prompt,
         effort=None, settings=None, cwd=None, extra_args=None,
-        timeout_s=1800.0, parse=None,
+        timeout_s=None, parse=None,
         pause_message=None, resume_message=None, persist_from=None, **common)
 ```
 
@@ -158,7 +158,7 @@ parse_b = capture("answer_b")
 
 The first node uses `parse=parse_a, outputs={"answer_a": str}`; the second uses `parse=parse_b, outputs={"answer_b": str}`. Each factory call binds its own output name, which must match the returned key and declared output. When generating nodes in a loop, call the factory per node; closures reading a changing loop variable would share its final binding.
 
-`effort` maps to the CLI's reasoning-effort control; `settings` to `claude --settings`; `timeout_s` ends the invocation with an error.
+`effort` maps to the CLI's reasoning-effort control; `settings` to `claude --settings`; `timeout_s` ends the invocation with an error. Never set `timeout_s` on LLM nodes unless the user has directly imposed a literal time limit, because a timeout can kill an invocation just short of completion and waste everything it has spent.
 
 `extra_args` supplies provider arguments, one list element per argument: normally separate elements for a flag and its value. Keep a value containing spaces in one element, without shell quotes. `["--tools", ""]` supplies an empty value; `["--tools"]` omits it; `["--tools", '""']` supplies literal quote characters. Use the first form for Claude's empty-set recipe below.
 
@@ -178,8 +178,6 @@ Controls below are supported by installed CLI help and adapter wiring (2026-09-1
 | `codex` / `codexb` | `["--disable", "shell_tool"]` | Turns off the default shell tool feature in app-server mode; other tools are outside this control. |
 
 No complete no-tools recipe is established here for Grok or Codex. Grok's hyphenated `--disallowed-tools` removes built-ins; `--disallowedTools` is a permission-rule alias.
-
-A model handed an empty tool set may still emit tool-call markup as plain text; when a node is meant to answer without tools, its prompt should say it has none.
 
 | provider | CLI | login (config dir) | live steering on Pause |
 |---|---|---|---|
@@ -367,7 +365,6 @@ L1 = LLMNode(
     inputs={"topic": str, "audience": str, "notes": str},
     outputs={"response": str, "draft": str},
     cwd=RUN_DIR,
-    timeout_s=600,
     gate=(
         "(e_topic and L1.invocations == 0)"
         " or (e_back and L2.invocations == L1.invocations"
@@ -389,7 +386,6 @@ L2 = LLMNode(
     inputs={"topic": str, "draft": str},
     outputs={"response": str, "score": int, "notes": str},
     cwd=RUN_DIR,
-    timeout_s=600,
 )
 
 S2 = ScriptNode(
@@ -415,7 +411,6 @@ H1 = HumanNode(
     ),
     inputs={"final_md": str},
     outputs={"approved": bool, "remarks": str},
-    timeout_s=600,
 )
 
 S4 = ScriptNode(

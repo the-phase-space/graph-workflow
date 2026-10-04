@@ -307,7 +307,7 @@ def run_llm(node: LLMNode, inputs: Inputs, *, run_id: str, run_dir, invocation: 
 
 def send_llm_message(node: LLMNode, session_id: str, message: str, *,
                      run_dir, invocation: int, tag: str, register_proc,
-                     timeout_s: float | None = 600.0):
+                     timeout_s: float | None = None):
     """Session-bound one-turn message (the Pause halt message, when it could
     not be steered into the live session). Returns (text, error)."""
     result, _ = _invoke_llm(

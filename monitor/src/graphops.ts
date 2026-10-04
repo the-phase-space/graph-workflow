@@ -102,7 +102,7 @@ export function makeNode(g: GraphModel, type: NodeType, provider?: string): Node
             prompt: "",
             outputs: { response: "str" },
             extra_args: [],
-            timeout_s: 1800,
+            timeout_s: null,
           };
   return { ...node, label: defaultLabel(g, node) };
 }

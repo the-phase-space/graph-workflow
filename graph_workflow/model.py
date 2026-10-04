@@ -346,7 +346,7 @@ class LLMNode(Node):
         settings: str | None = None,
         cwd: str | None = None,
         extra_args: list[str] | None = None,
-        timeout_s: float | None = 1800.0,
+        timeout_s: float | None = None,
         parse: Callable | None = None,
         pause_message: str | None = None,
         resume_message: str | None = None,

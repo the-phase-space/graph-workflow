@@ -554,6 +554,7 @@ class Runtime:
                             node, sid, self._pause_message(node),
                             run_dir=self.run_dir, invocation=ns.open_invocation,
                             tag="-pause", register_proc=register_proc,
+                            timeout_s=node.timeout_s,
                         )
                     else:
                         ack_text, ack_error = None, "no session id retained"

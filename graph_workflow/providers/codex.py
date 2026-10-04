@@ -113,7 +113,8 @@ class CodexAppServerInvocation:
             stdin.flush()
         return rid
 
-    def _rpc(self, method: str, params: dict | None, timeout: float) -> dict:
+    def _rpc(self, method: str, params: dict | None,
+             timeout: float | None = None) -> dict:
         rid = self._send(method, params)
         event = self._resp_events[rid]
         if not event.wait(timeout=timeout):
@@ -202,16 +203,16 @@ class CodexAppServerInvocation:
         try:
             self._rpc("initialize", {"clientInfo": {
                 "name": "graph-workflow", "title": "graph-workflow",
-                "version": "1"}}, timeout=60)
+                "version": "1"}})
             self._send("initialized", notify=True)
             if self._resume_session:
                 self._rpc("thread/resume", {
                     "threadId": self._resume_session, "cwd": self._cwd,
-                    **_THREAD_POLICY}, timeout=120)
+                    **_THREAD_POLICY})
             else:
                 thread = self._rpc("thread/start", {
                     "cwd": self._cwd, "model": node.model,
-                    **_THREAD_POLICY}, timeout=120)
+                    **_THREAD_POLICY})
                 self.thread_id = (thread.get("thread") or {}).get("id") or \
                     thread.get("threadId")
                 if not self.thread_id:
@@ -225,7 +226,7 @@ class CodexAppServerInvocation:
             }
             if node.effort:
                 turn_params["effort"] = node.effort
-            turn = self._rpc("turn/start", turn_params, timeout=120)
+            turn = self._rpc("turn/start", turn_params)
             tid = (turn.get("turn") or {}).get("id") or turn.get("turnId")
             if tid and self.turn_id is None:
                 self.turn_id = tid

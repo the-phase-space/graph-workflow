@@ -689,7 +689,7 @@ def generate(contract: dict) -> str:
                     pairs.append((key, repr(n[key])))
             if n.get("extra_args"):
                 pairs.append(("extra_args", _lit(n["extra_args"])))
-            if n.get("timeout_s") != 1800.0 and "timeout_s" in n:
+            if n.get("timeout_s") is not None:
                 pairs.append(("timeout_s", repr(n["timeout_s"])))
             if n.get("parse_ref") or n.get("parse_opaque"):
                 pairs.append(("parse", _callable_expression(
