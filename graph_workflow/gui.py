@@ -37,6 +37,7 @@ import os
 import re
 import sys
 import textwrap
+from dataclasses import dataclass
 from pathlib import Path
 
 from .model import (
@@ -80,7 +81,85 @@ class _Captured(BaseException):
         self.namespace = namespace
 
 
-def capture(path) -> tuple[Graph, dict]:
+@dataclass
+class _CallableSource:
+    value: object
+    expression: str
+    bindings: dict
+
+
+@contextlib.contextmanager
+def _record_callable_sources(path: Path, sources: dict | None):
+    """Record the expressions at executed node constructors, not repr(fn).
+
+    Only straight-line module expressions can be moved to the graph section.
+    Calls inside loops, comprehensions, functions, and classes may depend on
+    local or changing bindings; do not guess how to reconstruct those.
+    """
+    if sources is None:
+        yield
+        return
+
+    calls = {}
+
+    class Calls(ast.NodeVisitor):
+        def visit_Call(self, node):
+            calls[(node.lineno, node.end_lineno, node.col_offset, node.end_col_offset)] = node
+            self.generic_visit(node)
+
+        def visit_Lambda(self, node):
+            pass
+
+        visit_ListComp = visit_SetComp = visit_DictComp = visit_GeneratorExp = visit_Lambda
+
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for stmt in tree.body:
+        if isinstance(stmt, (ast.Assign, ast.AnnAssign, ast.Expr)):
+            Calls().visit(stmt)
+
+    def wrap(original, fields):
+        positional = [
+            p.name for p in inspect.signature(original).parameters.values()
+            if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+        ][1:]
+
+        def init(node, *args, **kwargs):
+            original(node, *args, **kwargs)
+            frame = sys._getframe(1)
+            if frame.f_code.co_filename != str(path) or frame.f_locals is not frame.f_globals:
+                return
+            pos = inspect.getframeinfo(frame, context=0).positions
+            call = calls.get(tuple(pos)) if pos is not None else None
+            if call is None:
+                return
+            expressions = {kw.arg: kw.value for kw in call.keywords if kw.arg is not None}
+            if not any(isinstance(arg, ast.Starred) for arg in call.args):
+                expressions.update(zip(positional, call.args))
+            for field in fields:
+                value = getattr(node, field, None)
+                expr = expressions.get(field)
+                if callable(value) and expr is not None:
+                    bindings = {
+                        n.id: frame.f_globals[n.id] for n in ast.walk(expr)
+                        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
+                        and n.id in frame.f_globals
+                    }
+                    sources[node, field] = _CallableSource(value, ast.unparse(expr), bindings)
+
+        return init
+
+    originals = {cls: cls.__init__ for cls in (ScriptNode, LLMNode, HumanNode)}
+    try:
+        for cls, fields in ((ScriptNode, ("fn",)), (LLMNode, ("prompt", "parse")),
+                            (HumanNode, ("prompt",))):
+            cls.__init__ = wrap(originals[cls], fields)
+        yield
+    finally:
+        for cls, original in originals.items():
+            cls.__init__ = original
+
+
+def capture(path, *, callable_sources: dict | None = None) -> tuple[Graph, dict]:
     """Execute the graph definition at ``path`` as ``__main__`` with the
     runtime entry points intercepted; returns (graph, namespace). A
     definition that never calls ``run()`` is scanned for a Graph binding."""
@@ -116,7 +195,7 @@ def capture(path) -> tuple[Graph, dict]:
     try:
         # The definition executes as __main__, so its own prints fire; stdout
         # must stay pure JSON for the GUI, so they are diverted to stderr.
-        with contextlib.redirect_stdout(sys.stderr):
+        with contextlib.redirect_stdout(sys.stderr), _record_callable_sources(path, callable_sources):
             module_ns = runpy.run_path(str(path), run_name="__main__")
     except _Captured as c:
         return c.graph, c.namespace
@@ -144,6 +223,10 @@ def _type_str(t) -> str:
 
 
 def _callable_source(fn) -> str | None:
+    # A nested def's text omits its enclosing bindings, including defaults.
+    # Preserve its constructor expression or module binding instead.
+    if getattr(fn, "__closure__", None) or "<locals>" in getattr(fn, "__qualname__", ""):
+        return None
     try:
         src = textwrap.dedent(inspect.getsource(fn))
     except (OSError, TypeError):
@@ -177,6 +260,25 @@ def _callable_ref(fn, namespace: dict) -> str | None:
     name = getattr(fn, "__name__", None)
     if name and name != "<lambda>" and namespace.get(name) is fn:
         return name
+    # Factories, partials, callable objects, and imported aliases need not
+    # have the same __name__ as their module-level binding (or any __name__).
+    for alias, value in namespace.items():
+        if value is fn and alias.isidentifier():
+            return alias
+    return None
+
+
+def _node_callable_ref(node: Node, field: str, namespace: dict, sources: dict | None) -> str | None:
+    value = getattr(node, field)
+    ref = _callable_ref(value, namespace)
+    if ref:
+        return ref
+    source = (sources or {}).get((node, field))
+    if source is not None and source.value is value and all(
+        name in namespace and namespace[name] is binding
+        for name, binding in source.bindings.items()
+    ):
+        return source.expression
     return None
 
 
@@ -187,18 +289,19 @@ def _gate_json(g: Gate) -> dict:
     return d
 
 
-def _prompt_fields(prompt, namespace: dict) -> dict:
+def _prompt_fields(node: Node, namespace: dict, sources: dict | None) -> dict:
+    prompt = node.prompt
     if isinstance(prompt, str) or prompt is None:
         return {"prompt": prompt, "prompt_ref": None}
-    ref = _callable_ref(prompt, namespace)
+    ref = _node_callable_ref(node, "prompt", namespace, sources)
     return {
         "prompt": None,
-        "prompt_ref": ref or repr(prompt),
+        "prompt_ref": ref,
         "prompt_opaque": ref is None,
     }
 
 
-def node_to_contract(node: Node, namespace: dict) -> dict:
+def node_to_contract(node: Node, namespace: dict, callable_sources: dict | None = None) -> dict:
     d: dict = {
         "id": node.id,
         "rank": node.rank,
@@ -210,13 +313,13 @@ def node_to_contract(node: Node, namespace: dict) -> dict:
     }
     if isinstance(node, ScriptNode):
         code = _callable_source(node.fn)
-        ref = _callable_ref(node.fn, namespace)
+        ref = _node_callable_ref(node, "fn", namespace, callable_sources)
         d["code"] = code
         d["code_ref"] = ref
         if code is None and ref is None:
             d["code_opaque"] = repr(node.fn)
     elif isinstance(node, LLMNode):
-        d.update(_prompt_fields(node.prompt, namespace))
+        d.update(_prompt_fields(node, namespace, callable_sources))
         d.update(
             provider=node.provider,
             effort=node.effort,
@@ -231,14 +334,17 @@ def node_to_contract(node: Node, namespace: dict) -> dict:
         if node.provider != "grok":
             d["model"] = node.model
         if node.parse is not None:
-            d["parse_ref"] = _callable_ref(node.parse, namespace) or repr(node.parse)
+            ref = _node_callable_ref(node, "parse", namespace, callable_sources)
+            d["parse_ref"] = ref
+            if ref is None:
+                d["parse_opaque"] = repr(node.parse)
     elif isinstance(node, HumanNode):
-        d.update(_prompt_fields(node.prompt, namespace))
+        d.update(_prompt_fields(node, namespace, callable_sources))
         d.update(shell_cmd=node.shell_cmd, timeout_s=node.timeout_s)
     return d
 
 
-def graph_to_contract(graph: Graph, namespace: dict) -> dict:
+def graph_to_contract(graph: Graph, namespace: dict, callable_sources: dict | None = None) -> dict:
     return {
         "name": graph.name,
         "semaphores": graph.semaphores.to_json(),
@@ -247,7 +353,7 @@ def graph_to_contract(graph: Graph, namespace: dict) -> dict:
         "run_dir": graph.run_dir,
         "seed": graph.seed,
         "monitor": graph.monitor,
-        "nodes": [node_to_contract(n, namespace) for n in graph.nodes_by_rank()],
+        "nodes": [node_to_contract(n, namespace, callable_sources) for n in graph.nodes_by_rank()],
         "edges": [
             {
                 "id": e.id,
@@ -381,7 +487,8 @@ def _carve_helpers(text: str, graph: Graph, namespace: dict) -> str:
 
 def load_contract(path) -> dict:
     path = Path(path).resolve()
-    graph, namespace = capture(path)
+    callable_sources = {}
+    graph, namespace = capture(path, callable_sources=callable_sources)
     try:
         warnings = validate(graph, namespace)
         errors: list[str] = []
@@ -400,11 +507,16 @@ def load_contract(path) -> dict:
         "path": str(path),
         "structured": structured,
         "helpers": helpers or "",
-        "graph": graph_to_contract(graph, namespace),
+        "graph": graph_to_contract(graph, namespace, callable_sources),
         "errors": errors,
         "warnings": list(warnings),
         "providers": known_providers(),
     }
+    for node in contract["graph"]["nodes"]:
+        for field, flag in (("fn", "code_opaque"), ("prompt", "prompt_opaque"),
+                            ("parse", "parse_opaque")):
+            if node.get(flag):
+                contract["warnings"].append(_opaque_callable_message(node, field))
     gui_meta = _parse_gui_meta(text)
     if gui_meta:
         gmodel = contract["graph"]
@@ -487,6 +599,26 @@ def _common_node_kwargs(n: dict) -> list[tuple[str, str | None]]:
     return out
 
 
+def _opaque_callable_message(node: dict, field: str) -> str:
+    return (
+        f"node {node['id']!r}: cannot save {field} callable because its Python "
+        "expression could not be preserved. Bind it to a module-level name "
+        "in the definition's helper code, then reload the definition."
+    )
+
+
+def _callable_expression(node: dict, field: str, ref: str | None, opaque=False) -> str:
+    if opaque or not isinstance(ref, str) or not ref.strip():
+        raise ValueError(_opaque_callable_message(node, field))
+    try:
+        compile(ref, f"<{node['id']} {field}>", "eval")
+    except SyntaxError as exc:
+        # Also covers contracts loaded by an older Monitor backend which
+        # stored <function ... at ...> in parse_ref as though it were code.
+        raise ValueError(_opaque_callable_message(node, field)) from exc
+    return ref
+
+
 def generate(contract: dict) -> str:
     g = contract["graph"]
     name = g.get("name") or "untitled"
@@ -528,7 +660,9 @@ def generate(contract: dict) -> str:
             if n.get("code"):
                 fn = _fn_name_for(n["code"], nid, body)
             elif n.get("code_ref"):
-                fn = n["code_ref"]
+                fn = _callable_expression(n, "fn", n["code_ref"])
+            elif n.get("code_opaque"):
+                raise ValueError(_opaque_callable_message(n, "fn"))
             else:
                 raise ValueError(f"script node {nid!r}: no code or code_ref to save")
             pairs.append(("fn", fn))
@@ -543,8 +677,9 @@ def generate(contract: dict) -> str:
                 pairs.append(("effort", repr(n["effort"])))
             if n.get("prompt") is not None:
                 pairs.append(("prompt", repr(n["prompt"])))
-            elif n.get("prompt_ref") and not n.get("prompt_opaque"):
-                pairs.append(("prompt", n["prompt_ref"]))
+            elif n.get("prompt_ref") or n.get("prompt_opaque"):
+                pairs.append(("prompt", _callable_expression(
+                    n, "prompt", n.get("prompt_ref"), n.get("prompt_opaque"))))
             else:
                 raise ValueError(f"LLM node {nid!r}: no prompt to save")
             for key in ("settings", "cwd", "pause_message", "resume_message", "persist_from"):
@@ -554,15 +689,17 @@ def generate(contract: dict) -> str:
                 pairs.append(("extra_args", _lit(n["extra_args"])))
             if n.get("timeout_s") != 1800.0 and "timeout_s" in n:
                 pairs.append(("timeout_s", repr(n["timeout_s"])))
-            if n.get("parse_ref"):
-                pairs.append(("parse", n["parse_ref"]))
+            if n.get("parse_ref") or n.get("parse_opaque"):
+                pairs.append(("parse", _callable_expression(
+                    n, "parse", n.get("parse_ref"), n.get("parse_opaque"))))
             pairs += _common_node_kwargs(n)
             body.append(f"{nid} = LLMNode({nid!r}, rank={n['rank']}, {_kwargs(pairs)})")
         elif ntype == "human":
             if n.get("prompt") is not None:
                 pairs.append(("prompt", repr(n["prompt"])))
-            elif n.get("prompt_ref") and not n.get("prompt_opaque"):
-                pairs.append(("prompt", n["prompt_ref"]))
+            elif n.get("prompt_ref") or n.get("prompt_opaque"):
+                pairs.append(("prompt", _callable_expression(
+                    n, "prompt", n.get("prompt_ref"), n.get("prompt_opaque"))))
             else:
                 raise ValueError(f"human node {nid!r}: no prompt to save")
             if n.get("shell_cmd"):

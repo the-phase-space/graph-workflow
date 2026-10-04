@@ -316,7 +316,7 @@ Then read the trace (`result.run_dir` names the folder): last event `run_end` wi
 - Definitions carry no narrative comments. A single-line docstring naming the graph's shape is the ceiling; a coupling that would otherwise need a comment becomes structure instead — a shared module constant, referenced by name from every gate string that depends on it.
 - Topology is static; there is no dynamic node spawning. Collections: iterate inside one script node, unroll a known N into parallel nodes, or ride the payload around a bounded cycle.
 - Every quiescence path is designed: loop bounds, branch escape hatches whose constants match the bounds they answer, `max_commits` as backstop.
-- Keep script fns and prompt callables as named module-level defs — expressions can call them, and the Monitor GUI round-trips them where inline lambdas in node kwargs turn opaque. In a GUI-saved file, hand-edit only the `# --- gw:helpers ---` section; `# --- gw:graph ---` is regenerated wholesale on every GUI save, and `# --- gw:gui ---` is display metadata the runtime ignores.
+- Keep script fns and prompt callables as named module-level defs. The Monitor also preserves callable expressions in direct module-level node constructors, including `parse=capture("answer")`, partials, and inline lambdas. A callable created inside a loop or function needs its own surviving module-level binding for GUI saves; otherwise the Monitor names the node and callable it cannot save. In a GUI-saved file, hand-edit only the `# --- gw:helpers ---` section; `# --- gw:graph ---` is regenerated wholesale on every GUI save, and `# --- gw:gui ---` is display metadata the runtime ignores.
 
 ## A full definition
 

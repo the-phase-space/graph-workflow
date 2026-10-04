@@ -60,6 +60,7 @@ export interface NodeSpec {
   resume_message?: string | null;
   persist_from?: string | null;
   parse_ref?: string | null;
+  parse_opaque?: string;
   // human
   shell_cmd?: string | null;
 }
