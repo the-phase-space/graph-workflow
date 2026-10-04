@@ -148,6 +148,8 @@ const NODE_KINDS: Array<{ kind: string; label: string }> = [
 ];
 
 export default function Canvas(props: {
+  /** Identifies the opened definition or run; stays stable through edits. */
+  graphKey: string;
   model: GraphModel;
   run: RunState | null;
   selection: Selection | null;
@@ -160,6 +162,7 @@ export default function Canvas(props: {
   onResetLayout?: () => void;
 }) {
   const {
+    graphKey,
     model,
     run,
     selection,
@@ -231,19 +234,18 @@ export default function Canvas(props: {
     });
   }, [layout, size]);
 
-  // The default viewport shows the whole graph: fit when a graph first
-  // arrives (once the holder has real dimensions) or its topology changes
-  // identity, or the node display mode flips (the bbox changes wholesale).
-  // Never on geometry changes — the view must hold still through window and
-  // inspector resizes; zoom belongs to the user alone.
+  // Fit a newly opened graph once the holder has real dimensions, or when
+  // the node display mode flips (the bbox changes wholesale). Keep pan and
+  // zoom through edits, including node/edge deletion and undo/redo, as well
+  // as window and inspector resizes.
   useEffect(() => {
     if (!size.w || !size.h) return;
-    const key = `${model.name}|${model.nodes.length}|${model.edges.length}|${nodeMode}`;
+    const key = `${graphKey}|${nodeMode}`;
     if (fittedFor.current !== key) {
       fittedFor.current = key;
       fit();
     }
-  }, [model, size, fit, nodeMode]);
+  }, [graphKey, size, fit, nodeMode]);
 
   const onWheel = (e: React.WheelEvent) => {
     e.preventDefault();

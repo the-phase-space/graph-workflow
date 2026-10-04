@@ -59,6 +59,8 @@ export default function App() {
     (window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"),
   );
   const [contract, setContract] = useState<Contract | null>(null);
+  // A new/opened definition gets a new canvas identity; edits and saves do not.
+  const [graphSession, setGraphSession] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [runDir, setRunDir] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -160,6 +162,7 @@ export default function App() {
           return;
         }
         setContract(result);
+        setGraphSession((s) => s + 1);
         resetHistory();
         setNodePos({});
         setDirty(false);
@@ -326,6 +329,7 @@ export default function App() {
       return;
     }
     setContract(result);
+    setGraphSession((s) => s + 1);
     resetHistory();
     setNodePos({});
     setDirty(true);
@@ -668,6 +672,7 @@ export default function App() {
       <div className="main" ref={mainRef}>
         {canvasModel ? (
           <Canvas
+            graphKey={mode === "exec" ? `run:${runDir}:${run.derived.runId}` : `build:${graphSession}`}
             model={canvasModel}
             run={mode === "exec" ? run : null}
             selection={selection}
