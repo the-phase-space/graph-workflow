@@ -1,7 +1,7 @@
 /* Monitor GUI styles. Light and dark modes via CSS variables on
    :root[data-theme]. Node category/provider identity is carried by base fill
-   color (translucent): claude orange, codex blue, grok purple, script gray,
-   human beige. */
+   color (translucent): claude orange, codex blue, grok purple, openrouter
+   emerald green, script gray, human beige. */
 
 :root[data-theme="light"] {
   --bg: #f4f5f7;
@@ -18,6 +18,7 @@
   --fill-claude: rgba(255, 122, 12, 0.52);
   --fill-codex: rgba(37, 99, 235, 0.38);
   --fill-grok: rgba(147, 51, 234, 0.36);
+  --fill-openrouter: rgba(16, 185, 129, 0.40);
   --fill-script: rgba(110, 117, 124, 0.30);
   --fill-human: rgba(205, 170, 120, 0.48);
   --gen-fill: #dfe3e8;
@@ -40,6 +41,7 @@
   --fill-claude: rgba(255, 136, 26, 0.58);
   --fill-codex: rgba(80, 140, 255, 0.45);
   --fill-grok: rgba(168, 85, 247, 0.45);
+  --fill-openrouter: rgba(16, 185, 129, 0.45);
   --fill-script: rgba(160, 168, 176, 0.32);
   --fill-human: rgba(224, 196, 152, 0.50);
   --gen-fill: #343943;
@@ -261,6 +263,10 @@ body.col-resizing .sidebar-handle {
 
 .btn-grid.one-col {
   grid-template-columns: 1fr;
+}
+
+.btn-grid:not(.one-col) .col-2 {
+  grid-column: 2;
 }
 
 .btn-row {

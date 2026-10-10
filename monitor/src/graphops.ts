@@ -27,6 +27,13 @@ function numberedId(base: string, taken: Set<string>): string {
  * never derive from the provider name's first letter (claude/codex collide). */
 const LLM_ID_PREFIX: Record<string, string> = {
   claude: "LCl", claudeb: "LClb", codex: "LCo", codexb: "LCob", grok: "LGr",
+  openrouter: "LOr",
+};
+
+/** Model a freshly created LLM node starts with, per provider. */
+const DEFAULT_MODEL: Record<string, string> = {
+  claude: "sonnet", claudeb: "sonnet", codex: "gpt-6-luna", codexb: "gpt-6-luna",
+  grok: "grok-4.6", openrouter: "muse-spark-1.3",
 };
 
 function takenIds(g: GraphModel): Set<string> {
@@ -97,7 +104,7 @@ export function makeNode(g: GraphModel, type: NodeType, provider?: string): Node
             ...common,
             type: "llm",
             provider: p,
-            model: p.startsWith("codex") ? "gpt-6-luna" : p === "grok" ? "grok-4.6" : "sonnet",
+            model: DEFAULT_MODEL[p] ?? "sonnet",
             effort: "medium",
             prompt: "",
             outputs: { response: "str" },

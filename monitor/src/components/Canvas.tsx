@@ -145,6 +145,7 @@ const NODE_KINDS: Array<{ kind: string; label: string }> = [
   { kind: "claude", label: "Claude" },
   { kind: "codex", label: "Codex" },
   { kind: "grok", label: "Grok" },
+  { kind: "openrouter", label: "OpenRouter" },
 ];
 
 export default function Canvas(props: {

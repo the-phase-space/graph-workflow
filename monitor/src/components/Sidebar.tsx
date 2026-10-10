@@ -224,13 +224,17 @@ export default function Sidebar(props: {
                 ref={gridRef}
               >
                 {/* DOM order is row-major for the two-column grid: columns
-                    read Script/Human/Edge and Claude/Codex/Grok. */}
+                    read Script/Human/Edge and Claude/Codex/Grok/OpenRouter;
+                    the odd provider button is pinned to the right column. */}
                 <button onClick={() => props.onAddNode("script")}>+ Script</button>
                 <button onClick={() => props.onAddNode("claude")}>+ Claude</button>
                 <button onClick={() => props.onAddNode("human")}>+ Human</button>
                 <button onClick={() => props.onAddNode("codex")}>+ Codex</button>
                 <button onClick={props.onAddEdge}>+ Edge</button>
                 <button onClick={() => props.onAddNode("grok")}>+ Grok</button>
+                <button className="col-2" onClick={() => props.onAddNode("openrouter")}>
+                  + OpenRouter
+                </button>
               </div>
               <div className="btn-col">
                 <button onClick={() => props.onSelect({ kind: "graph", id: "graph" })}>

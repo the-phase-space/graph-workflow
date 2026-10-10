@@ -19,11 +19,12 @@ export interface EdgeSpec {
 }
 
 export type NodeType = "script" | "llm" | "human";
-export type Provider = "claude" | "claudeb" | "codex" | "codexb" | "grok";
+export type Provider = "claude" | "claudeb" | "codex" | "codexb" | "grok" | "openrouter";
 /** Every provider the runtime knows, in dropdown order. The `b` variants run
  * the same CLI on its second config dir (~/.claudeb, ~/.codexb) — a second
- * login, i.e. a second rate limit — and take that CLI's models. */
-export const PROVIDERS: Provider[] = ["claude", "claudeb", "codex", "codexb", "grok"];
+ * login, i.e. a second rate limit — and take that CLI's models. `openrouter`
+ * runs OpenRouter API models through the local DSH CLI (`dsh -p`). */
+export const PROVIDERS: Provider[] = ["claude", "claudeb", "codex", "codexb", "grok", "openrouter"];
 
 export interface NodeSpec {
   id: string;
@@ -235,6 +236,11 @@ export const PROVIDER_MODELS: Record<string, ModelOption[]> = {
   grok: [
     { alias: "Grok 4.6", id: "grok-4.6", efforts: GROK_EFFORTS },
   ],
+  // The adapter expands the short alias to `meta/muse-spark-1.3-contributor`;
+  // other ids typed into the Model field pass through to DSH untouched.
+  openrouter: [
+    { alias: "Muse Spark 1.3", id: "muse-spark-1.3", efforts: BASE_EFFORTS },
+  ],
 };
 
 /** Efforts offered for a provider/model pair: the model's own list when the
@@ -305,6 +311,8 @@ export function nodeFill(node: Pick<NodeSpec, "type" | "provider">): string {
       return "var(--fill-codex)";
     case "grok":
       return "var(--fill-grok)";
+    case "openrouter":
+      return "var(--fill-openrouter)";
     default:
       return "var(--fill-script)";
   }
