@@ -12,7 +12,7 @@ This runtime resembles DAG/pipeline systems just enough to import wrong assumpti
 - Rank is a scheduling priority, not topology.
 - Failure is a value. Exceptions and timeouts are recorded on the commit; missing required outputs make the default output expression FALSE. Nothing raises across the graph; the run continues to quiescence.
 - Gating expressions are ordinary Python strings; there is no expression DSL and no gate function library.
-- LLM nodes are headless CLI sessions (`claude`, `codex`, `grok`, plus `claudeb`/`codexb` — the same CLIs on a second login) with permissions bypassed.
+- LLM nodes are headless CLI sessions (`claude`, `codex`, `grok`, `openrouter` through `dsh`, plus `claudeb`/`codexb` — the same CLIs on a second login) with permissions bypassed.
 
 ## Shape
 
@@ -99,7 +99,7 @@ LLMNode(id, rank, provider, model, prompt,
         pause_message=None, resume_message=None, persist_from=None, **common)
 ```
 
-One invocation = one headless CLI turn, in a fresh session by default. `persist_from="A"` instead sends this node's rendered prompt into A's latest session, using the provider's resume mechanism (`--resume ID`, or Codex's thread resume). The session ID is bound when this invocation starts and recorded in the trace for recovery. No manual UUID wiring is needed:
+One invocation = one headless CLI turn, in a fresh session by default. `persist_from="A"` instead sends this node's rendered prompt into A's latest session, using the provider's resume mechanism (`--resume ID`, or Codex's thread resume). OpenRouter's current DSH CLI has no resume operation: fresh invocations work, but an attempt to resume an OpenRouter session fails as an ordinary node invocation error. The session ID is bound when this invocation starts and recorded in the trace for recovery. No manual UUID wiring is needed:
 
 ```python
 g = Graph("shared-context")
@@ -139,9 +139,9 @@ g.add_edges(Edge("start", g.generator, A), Edge("forward", A, B),
 
 Each agent remembers its own turns; ordinary graph inputs deliver the other agent's latest reply. A's prompt handles the missing input on its first turn.
 
-Validation checks only that the source node exists and a directed path leads from it to this node. It ignores gates, provider/login compatibility, and concurrent session use; cycles are allowed. Authors must arrange for an LLM source to have a session available, use a provider/login that can resume it, and order turns as needed. A missing session on another node means an invocation error; only self-reference bootstraps a fresh context. This declaration adds no edges or scheduling constraints. Pause/Resume still completes the same invocation in its bound session with `resume_message`; ordinary persistence uses `prompt`. The Monitor's LLM node dialog exposes the same field as **Persist from**.
+Validation checks only that the source node exists and a directed path leads from it to this node. It ignores gates, provider/login compatibility, and concurrent session use; cycles are allowed. Authors must arrange for an LLM source to have a session available, use a provider/login that can resume it, and order turns as needed. A missing session on another node means an invocation error; only self-reference bootstraps a fresh context. This declaration adds no edges or scheduling constraints. For providers that support session resume, Pause/Resume completes the same invocation in its bound session with `resume_message`; ordinary persistence uses `prompt`. The Monitor's LLM node dialog exposes the same field as **Persist from**.
 
-Provider API-key env vars are stripped on purpose: the CLIs must be installed and logged in, and they run with permissions bypassed — `cwd` (default: the launching process's) is the agent's working directory and its blast radius.
+The existing `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and `XAI_API_KEY` stripping applies to every provider. Claude, Codex, and Grok must be installed and logged in; OpenRouter uses DSH's credential store as described below. The CLIs run with permissions bypassed — `cwd` (default: the launching process's) is the agent's working directory and its blast radius.
 
 `prompt` is a `string.Template` string — `$name` substitutes the captured input, non-strings JSON-encoded, `$$` a literal `$`, and a name never captured survives as literal `$name` text, silently — or a callable `prompt(inputs) -> str`; use the callable and branch on `isDefined(...)` whenever an input is optional. If `response` is declared it receives the raw reply text; by default, every other declared output is extracted from the last JSON object in the reply (fenced blocks first), so the prompt must end by demanding it — "End your reply with exactly one JSON object, no prose after it, no code fences:" followed by a sketch carrying exactly the declared names. A declared key missing from the reply stays undefined, and the default output expression then commits FALSE. `parse(text, raw) -> dict` replaces the JSON extraction; its keys map onto declared outputs, undeclared keys warn and drop. Bind per-node output names with a parser factory:
 
@@ -166,9 +166,11 @@ GW passes argv directly to `subprocess.Popen` without enabling a shell or adding
 
 For Claude and Grok, `extra_args` follows GW's generated CLI options and precedes `--session-id ID` or `--resume ID`; no special terminator is needed for the empty Claude value. Codex defaults to `[exe, "app-server", *extra_args]`: use server startup options such as `--disable FEATURE` or `-c key=value`. Model and effort are sent later by RPC; `extra_args` is not an RPC parameter map. The legacy `GW_CODEX_EXEC=1` path takes `codex exec` arguments instead.
 
-Tool availability is separate from a prompt instruction to refrain from using tools. GW has no dedicated tool-availability parameter; use provider controls through `extra_args`. GW independently requests permission bypass: Claude `--dangerously-skip-permissions`, Grok `--yolo`, and Codex `approvalPolicy="never", sandbox="danger-full-access"` on thread start and resume. These policies do not remove tools.
+OpenRouter invokes native `dsh -p --provider openrouter --model ID [--effort EFFORT]`, followed by `extra_args`, `--session-id ID`, and `-- -`. GW supplies the rendered prompt through UTF-8 stdin and closes it; multiline text, quotes, long prompts, and a literal `-` stay intact. `settings` remains Claude-only.
 
-Controls below are supported by installed CLI help and adapter wiring (2026-09-10); Codex's feature listing also confirmed `shell_tool=false`. Claude's first `system`/`init` line in `sessions/<node>-<inv>.jsonl` lists the tools a session actually had, which is the inventory to trust:
+Tool availability is separate from a prompt instruction to refrain from using tools. GW has no dedicated tool-availability parameter; use provider controls through `extra_args`. GW independently requests permission bypass: Claude `--dangerously-skip-permissions`, Grok `--yolo`, Codex `approvalPolicy="never", sandbox="danger-full-access"` on thread start and resume, and DSH's full-access `-p` default for OpenRouter. These policies do not remove tools.
+
+Claude, Grok, and Codex controls below are supported by installed CLI help and adapter wiring (2026-09-10); Codex's feature listing also confirmed `shell_tool=false`. The OpenRouter row uses DSH's tool controls. Claude's first `system`/`init` line in `sessions/<node>-<inv>.jsonl` lists the tools a session actually had, which is the inventory to trust:
 
 | Provider | `extra_args` | Scope |
 |---|---|---|
@@ -176,6 +178,7 @@ Controls below are supported by installed CLI help and adapter wiring (2026-09-1
 | | `["--tools", "", "--strict-mcp-config"]` | `tools: []`, `mcp_servers: []` (verified) |
 | `grok` | `["--disable-web-search"]` | Disables web search/fetch. `--tools <TOOLS>` and `--disallowed-tools <TOOLS>` select/remove comma-separated built-ins; empty `--tools` has no documented no-tools meaning. |
 | `codex` / `codexb` | `["--disable", "shell_tool"]` | Turns off the default shell tool feature in app-server mode; other tools are outside this control. |
+| `openrouter` | `["--agent", "reviewer", "--allow-tool", "write", "--deny-tool", "web_fetch"]` | Loads `~/.dsh/agents` by frontmatter name. Repeatable allowances extend its tools and clear matching frontmatter denials; CLI denials win. `--tools-mode native` removes the Code Mode transport. |
 
 No complete no-tools recipe is established here for Grok or Codex. Grok's hyphenated `--disallowed-tools` removes built-ins; `--disallowedTools` is a permission-rule alias.
 
@@ -186,8 +189,11 @@ No complete no-tools recipe is established here for Grok or Codex. Grok's hyphen
 | `codex` | `codex app-server` JSON-RPC | `~/.codex` | yes (`GW_CODEX_EXEC=1` = legacy `codex exec`, no steering) |
 | `codexb` | as `codex` | `~/.codexb` | as `codex` |
 | `grok` | `grok --prompt-file` | `~/.grok` | no — interrupt, halt delivered on session resume |
+| `openrouter` | `dsh -p --provider openrouter` | `~/.dsh` | no; DSH also lacks session resume, so an interrupted turn cannot continue |
 
 `claudeb`/`codexb` are `claude`/`codex` on the CLI's second config dir, i.e. a second login: same CLI, same models and efforts (the `claude` and `codex` rows below), a separate rate limit, and a separate key for `Semaphores(providers=...)`. Treat the choice as picking which account's limit a node spends. The config-dir variables (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GROK_HOME`) are stripped from every node's environment alongside the API keys and set from the provider name alone, so `claude` means the `~/.claude` login even when the definition was launched from a `claudeb` session, and an MCP server registered on one login is reachable only from nodes on that provider. A missing config dir is an error of the same kind as a CLI missing from PATH.
+
+OpenRouter requires `dsh.exe` on Windows (`dsh` elsewhere). Its adapter clears inherited `DSH_HOME` so the normal `~/.dsh` configuration applies. Credentials resolve inside DSH from `~/.dsh/.credentials.yaml`, with `OPENROUTER_API_KEY` honored as DSH's override; GW does not read the key. Stdout is the final assistant text, including for `parse(text, raw)` where `raw` is that stdout string. Nonzero exits retain DSH's stderr diagnostic as the node error. The node's session id names the DSH transcript; `dsh export ID` decodes it. DSH supplies no usage envelope on stdout, so GW's usage and context-size metrics retain their existing empty/zero defaults. All OpenRouter models use the existing `LLMNode` class.
 
 | Provider | Model | CLI slug | Accepted efforts |
 |---|---|---|---|
@@ -200,6 +206,15 @@ No complete no-tools recipe is established here for Grok or Codex. Grok's hyphen
 | `codex` | Terra | `gpt-5.6-terra` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
 | `codex` | Sol | `gpt-6.1-sol` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
 | `codex` | Astra | `gpt-6-astra` | `low`, `medium`, `high`, `xhigh`, `max`, `ultra` |
+| `openrouter` | Muse Spark 1.3 | `meta/muse-spark-1.3-contributor` (alias `muse-spark-1.3`) | `low`, `medium`, `high`, `xhigh`, `max` |
+
+Muse Spark 1.3 is the only supplied OpenRouter model for now, matching `delegate_v20`. The adapter expands `muse-spark-1.3` to the listed id; other explicit ids pass through to DSH. Use `provider="openrouter"`, not the delegate wrapper's `dsh` provider name:
+
+```python
+A = LLMNode("A", rank=0, provider="openrouter", model="muse-spark-1.3",
+            effort="high", prompt="Summarize the requested work.",
+            outputs={"response": str})
+```
 
 The table, not `claude --help`, is the accepted set: `ultracode` is absent from the help text yet accepted by `--effort`, verified by execution, and required whenever a Claude node is meant to achieve its task by running a dynamic multi-agent workflow.
 

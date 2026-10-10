@@ -16,10 +16,12 @@ from .base import (
 from .claude import ClaudeAdapter, ClaudeBAdapter
 from .codex import CodexAdapter, CodexBAdapter
 from .grok import GrokAdapter
+from .openrouter import OpenRouterAdapter
 
 _REGISTRY: dict[str, ProviderAdapter] = {
     a.name: a for a in (
         ClaudeAdapter(), ClaudeBAdapter(), CodexAdapter(), CodexBAdapter(), GrokAdapter(),
+        OpenRouterAdapter(),
     )
 }
 
