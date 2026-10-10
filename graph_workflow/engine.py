@@ -275,7 +275,7 @@ class Runtime:
         declaration controls it, overridable per run by ``run(monitor=)``:
         False never launches; True launches the default exe; a path launches
         that exe; None launches the default exe only when it exists and
-        stderr is an interactive console (so test harnesses, pipelines, and
+        stderr is an interactive console (so unattended runs, pipelines, and
         runs the GUI itself spawns stay headless)."""
         import subprocess
         import sys as _sys

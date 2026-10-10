@@ -8,7 +8,7 @@
 // output schema. The shell blocks until the human submits, then writes
 // {"outputs": {...}} to the response path and exits. With --auto-response a
 // mapping file ({"<node_id>": {...}, "*": {...}}) answers headlessly — no
-// window — which is how automated tests exercise human nodes end to end.
+// window — so unattended runs can drive human nodes end to end.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 

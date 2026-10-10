@@ -350,7 +350,7 @@ def run_human(node: HumanNode, inputs: Inputs, *, run_id: str, run_dir,
     def done(outputs, error=None):
         return outputs, {"duration_s": round(time.monotonic() - t0, 3)}, error
 
-    # Test hook: bypass the shell entirely with canned responses.
+    # Headless hook: bypass the shell entirely with canned responses.
     auto = os.environ.get("GW_HUMAN_AUTO")
     if auto:
         try:
