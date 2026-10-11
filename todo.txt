@@ -1,6 +1,0 @@
-- Monitor activity log: show OpenRouter (dsh) output. The per-node activity
-  pane only parses JSON lines from sessions/<node>-<inv>.jsonl
-  (monitor/src/runstate.ts, parseStreamLine + the sessions loop). DSH writes
-  plain text to stdout, so an openrouter node's pane stays empty during a run;
-  its output only appears via the trace commit. Add a plain-text fallback in
-  the session parser (treat non-JSON lines as an assistant message).
