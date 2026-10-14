@@ -236,10 +236,12 @@ export const PROVIDER_MODELS: Record<string, ModelOption[]> = {
   grok: [
     { alias: "Grok 4.6", id: "grok-4.6", efforts: GROK_EFFORTS },
   ],
-  // The adapter expands the short alias to `meta/muse-spark-1.3-contributor`;
-  // other ids typed into the Model field pass through to DSH untouched.
+  // The adapter expands these short aliases to their OpenRouter ids
+  // (`meta/muse-spark-1.3-contributor`, `meta/muse-wonder`); other ids typed
+  // into the Model field pass through to DSH untouched.
   openrouter: [
     { alias: "Muse Spark 1.3", id: "muse-spark-1.3", efforts: BASE_EFFORTS },
+    { alias: "Muse Wonder", id: "muse-wonder", efforts: BASE_EFFORTS },
   ],
 };
 

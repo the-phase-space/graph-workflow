@@ -7,7 +7,10 @@ import os
 from ..errors import GraphDefinitionError
 from .base import InvocationPlan, InvocationResult, ProviderAdapter
 
-_MODEL_ALIASES = {"muse-spark-1.3": "meta/muse-spark-1.3-contributor"}
+_MODEL_ALIASES = {
+    "muse-spark-1.3": "meta/muse-spark-1.3-contributor",
+    "muse-wonder": "meta/muse-wonder",
+}
 
 
 class OpenRouterAdapter(ProviderAdapter):
