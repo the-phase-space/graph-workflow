@@ -93,8 +93,7 @@ export default function NodeDialog(props: {
                 <KV k="commits" v={String(statusNode?.commits ?? 0)} />
                 {node.type === "llm" && (
                   <>
-                    <KV k="context size" v={fmtTokens(context)} />
-                    <KV k="output tokens" v={fmtTokens(rt?.tokensCommitted ?? 0)} />
+                    <KV k="tokens" v={fmtTokens(context)} />
                     {rt?.sessionId && <KV k="session" v={<code>{rt.sessionId}</code>} />}
                   </>
                 )}

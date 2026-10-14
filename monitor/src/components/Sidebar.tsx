@@ -3,8 +3,8 @@
 // Resume above a smaller, immediate red Stop).
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { totalOutputTokens, visualState, type RunState } from "../runstate";
-import { fmtDuration, fmtTokens, type GraphModel, type Selection } from "../types";
+import { visualState, type RunState } from "../runstate";
+import { fmtDuration, type GraphModel, type Selection } from "../types";
 
 // Resizable via the right-edge handle; dragging below the collapse threshold
 // snaps to the minimized rail (the » button restores the previous width).
@@ -161,7 +161,6 @@ export default function Sidebar(props: {
             <Row k="Seed" v={d.seed != null ? String(d.seed) : "—"} mono />
             <Row k="State" v={runState ?? "starting…"} />
             <Row k="Elapsed" v={elapsed != null ? fmtDuration(elapsed) : "—"} />
-            <Row k="Output tokens" v={fmtTokens(totalOutputTokens(d))} />
             <Row k="Events" v={String(d.eventCount)} />
           </tbody>
         </table>

@@ -9,7 +9,6 @@ import { joinPath, listDir, readText, tailText } from "./ipc";
 import {
   GEN,
   contextTokens,
-  outputTokens,
   type ActivityItem,
   type GraphModel,
   type NodeRuntime,
@@ -25,8 +24,6 @@ function freshNode(): NodeRuntime {
     lastError: null,
     commits: 0,
     invocations: 0,
-    tokensCommitted: 0,
-    tokensLive: 0,
     contextSize: 0,
     sessionId: null,
     receivedInputs: new Set(),
@@ -96,7 +93,6 @@ function applyEvent(d: RunDerived, ev: TraceEvent) {
         node.everRan = true;
         node.lastStartTs = ev.ts;
         node.invocations = Math.max(node.invocations, ev.invocation ?? 0);
-        node.tokensLive = 0;
       }
       break;
     case "commit":
@@ -108,8 +104,6 @@ function applyEvent(d: RunDerived, ev: TraceEvent) {
         node.writtenOutputs = new Set(Object.keys(ev.outputs ?? {}));
         node.outputState = ev.output_state;
         const m = ev.metrics ?? {};
-        node.tokensCommitted += outputTokens(m.usage);
-        node.tokensLive = 0;
         if (typeof m.context_size === "number") node.contextSize = m.context_size;
         if (typeof m.duration_s === "number") node.durationS = m.duration_s;
         if (typeof m.session_id === "string") node.sessionId = m.session_id;
@@ -446,13 +440,6 @@ export function nodeContext(
   statusNode: { state: string; invocations: number } | undefined,
 ): number {
   return nodeLiveContext(live, nodeId, statusNode) || (rt?.contextSize ?? 0);
-}
-
-/** Cumulative output tokens over every committed invocation in the run. */
-export function totalOutputTokens(d: RunDerived): number {
-  let total = 0;
-  for (const rt of d.nodes.values()) total += rt.tokensCommitted;
-  return total;
 }
 
 export { GEN };
