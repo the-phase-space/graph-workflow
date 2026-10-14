@@ -106,6 +106,12 @@ class ProviderAdapter:
     def parse(self, stdout: str, stderr: str, returncode: int) -> InvocationResult:
         raise NotImplementedError
 
+    def after_parse(self, result: InvocationResult, session_id: str | None) -> None:
+        """Post-parse hook, called once ``result.session_id`` is settled. For
+        CLIs whose stdout carries no usage envelope, this is where the
+        adapter may consult the provider's persisted transcript to fill in
+        ``result.usage`` / ``result.context_size``. Must never raise."""
+
     # -- shared helpers ---------------------------------------------------- #
 
     @staticmethod

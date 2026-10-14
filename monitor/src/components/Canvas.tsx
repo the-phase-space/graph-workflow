@@ -24,7 +24,7 @@ import {
   type NodeMode,
   type Rect,
 } from "../layout";
-import { nodeLiveTokens, visualState, type RunState, type VisualState } from "../runstate";
+import { nodeContext, visualState, type RunState, type VisualState } from "../runstate";
 import {
   GEN,
   fmtDuration,
@@ -548,8 +548,9 @@ export default function Canvas(props: {
             const rt = run?.derived.nodes.get(n.id);
             const vs: VisualState = run ? visualState(statusNode?.state, rt) : "idle";
             const glow = GLOW[vs];
-            const live = run ? nodeLiveTokens(run.liveTokens, n.id, statusNode) : 0;
-            const tokens = (rt?.tokensCommitted ?? 0) + live;
+            // Context size, as Claude Code's footer reports it: live while
+            // the invocation is open, else the last committed call's window.
+            const tokens = run ? nodeContext(rt, run.liveTokens, n.id, statusNode) : 0;
             const timer =
               vs === "running" && rt?.lastStartTs ? now - rt.lastStartTs : null;
             const isSel = selection?.kind === "node" && selection.id === n.id;

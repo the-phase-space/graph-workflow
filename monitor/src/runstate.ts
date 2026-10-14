@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { joinPath, listDir, readText, tailText } from "./ipc";
 import {
   GEN,
+  contextTokens,
   outputTokens,
   type ActivityItem,
   type GraphModel,
@@ -142,7 +143,8 @@ function contentToText(content: unknown): string {
   return "";
 }
 
-/** One provider-stream line -> zero or more activity items. Handles the
+/** One provider-stream line -> zero or more activity items, plus the live
+ * context size when the line reports one model call's usage. Handles the
  * claude stream-json vocabulary, the codex app-server JSON-RPC vocabulary,
  * and grok's terminal JSON blob; unknown lines are ignored. */
 function parseStreamLine(obj: any, ts: number | null): { items: ActivityItem[]; liveTokens: number | null } {
@@ -173,13 +175,23 @@ function parseStreamLine(obj: any, ts: number | null): { items: ActivityItem[]; 
           ts,
         });
     }
-    // claude's assistant events carry the message-start usage snapshot
-    // (output_tokens ~1-4 regardless of reply length); only the terminal
-    // `result` event reports real output tokens, so no live update here.
+    // claude's assistant events carry that model call's usage snapshot:
+    // fresh + cached input is exact, output_tokens is the message-start
+    // placeholder (~1-4). Close enough for a live context figure.
+    if (type === "assistant") {
+      const ctx = contextTokens(msg.usage);
+      if (ctx) liveTokens = ctx;
+    }
     return { items, liveTokens };
   }
   if (type === "result") {
-    if (obj.usage) liveTokens = outputTokens(obj.usage);
+    // The result usage is summed over the turn's calls; only its last
+    // `iterations` entry is a context-window figure.
+    const iters = obj.usage?.iterations;
+    if (Array.isArray(iters) && iters.length) {
+      const ctx = contextTokens(iters[iters.length - 1]);
+      if (ctx) liveTokens = ctx;
+    }
     items.push({
       kind: "info",
       label: obj.is_error ? "result (error)" : "result",
@@ -218,8 +230,8 @@ function parseStreamLine(obj: any, ts: number | null): { items: ActivityItem[]; 
           ts,
         });
     } else if (method === "thread/tokenUsage/updated") {
-      // `total` is cumulative across the thread — the live figure we want.
-      const n = outputTokens(params.tokenUsage?.total ?? params.tokenUsage);
+      // `last` is the most recent model call — its total is the context.
+      const n = contextTokens(params.tokenUsage?.last ?? params.tokenUsage);
       if (n) liveTokens = n;
     } else if (method === "turn/started") {
       items.push({ kind: "info", label: "turn started", text: "", ts });
@@ -241,7 +253,7 @@ function parseStreamLine(obj: any, ts: number | null): { items: ActivityItem[]; 
     const v = obj?.[key];
     if (typeof v === "string" && v) {
       items.push({ kind: "message", label: "assistant", text: v, ts });
-      if (obj.usage) liveTokens = outputTokens(obj.usage);
+      if (obj.usage) liveTokens = contextTokens(obj.usage) || null;
       return { items, liveTokens };
     }
   }
@@ -413,9 +425,9 @@ export function visualState(
   return "idle";
 }
 
-/** Live tokens for a node's currently-open invocation only — committed
- * invocations are already counted via trace commit usage. */
-export function nodeLiveTokens(
+/** Live context size of a node's currently-open invocation, 0 when the
+ * node is not mid-invocation or its provider stream reports none. */
+export function nodeLiveContext(
   live: Map<string, number>,
   nodeId: string,
   statusNode: { state: string; invocations: number } | undefined,
@@ -425,16 +437,21 @@ export function nodeLiveTokens(
   return live.get(`${nodeId}#${statusNode.invocations}`) ?? 0;
 }
 
-export function totalTokens(
-  d: RunDerived,
+/** The node's context size to display: the live figure while an
+ * invocation is open, else the last committed invocation's. */
+export function nodeContext(
+  rt: NodeRuntime | undefined,
   live: Map<string, number>,
-  statusNodes: Record<string, { state: string; invocations: number }> | undefined,
+  nodeId: string,
+  statusNode: { state: string; invocations: number } | undefined,
 ): number {
+  return nodeLiveContext(live, nodeId, statusNode) || (rt?.contextSize ?? 0);
+}
+
+/** Cumulative output tokens over every committed invocation in the run. */
+export function totalOutputTokens(d: RunDerived): number {
   let total = 0;
-  for (const [id, rt] of d.nodes.entries()) {
-    total += rt.tokensCommitted;
-    total += nodeLiveTokens(live, id, statusNodes?.[id]);
-  }
+  for (const rt of d.nodes.values()) total += rt.tokensCommitted;
   return total;
 }
 

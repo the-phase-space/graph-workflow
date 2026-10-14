@@ -247,6 +247,7 @@ def _invoke_llm(node: LLMNode, prompt: str, *, resume_session: str | None,
         result.session_id = resume_session or (
             None if getattr(adapter, "provider_assigns_session", False) else session_id
         )
+    adapter.after_parse(result, result.session_id)
     return result, handle
 
 

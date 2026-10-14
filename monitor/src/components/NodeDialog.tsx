@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { nodeLiveTokens, type RunState } from "../runstate";
+import { nodeContext, type RunState } from "../runstate";
 import {
   PROVIDERS,
   PROVIDER_MODELS,
@@ -62,7 +62,7 @@ export default function NodeDialog(props: {
 
   const received = rt?.receivedInputs ?? new Set<string>();
   const written = rt?.writtenOutputs ?? new Set<string>();
-  const live = run ? nodeLiveTokens(run.liveTokens, node.id, statusNode) : 0;
+  const context = run ? nodeContext(rt, run.liveTokens, node.id, statusNode) : 0;
 
   return (
     <div className="dialog node-dialog">
@@ -93,11 +93,8 @@ export default function NodeDialog(props: {
                 <KV k="commits" v={String(statusNode?.commits ?? 0)} />
                 {node.type === "llm" && (
                   <>
-                    <KV
-                      k="tokens"
-                      v={fmtTokens((rt?.tokensCommitted ?? 0) + live)}
-                    />
-                    <KV k="context size" v={fmtTokens(rt?.contextSize ?? 0)} />
+                    <KV k="context size" v={fmtTokens(context)} />
+                    <KV k="output tokens" v={fmtTokens(rt?.tokensCommitted ?? 0)} />
                     {rt?.sessionId && <KV k="session" v={<code>{rt.sessionId}</code>} />}
                   </>
                 )}

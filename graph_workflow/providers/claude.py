@@ -31,6 +31,17 @@ def _is_result_line(line: str) -> bool:
     return line.lstrip().startswith("{") and '"type":"result"' in line
 
 
+_CONTEXT_KEYS = ("input_tokens", "cache_creation_input_tokens",
+                 "cache_read_input_tokens", "output_tokens")
+
+
+def _context_tokens(usage: dict) -> int:
+    """Tokens in one model call's context window: fresh + cached input and
+    the reply (what Claude Code's footer reports)."""
+    return sum(int(usage[k]) for k in _CONTEXT_KEYS
+               if isinstance(usage.get(k), (int, float)))
+
+
 class ClaudeAdapter(ProviderAdapter):
     name = "claude"
     executable = "claude"
@@ -79,6 +90,7 @@ class ClaudeAdapter(ProviderAdapter):
         r = InvocationResult(raw=None)
         result_evt = None
         assistant_texts: list[str] = []
+        last_call_usage: dict | None = None
         for line in stdout.splitlines():
             line = line.strip()
             if not line.startswith("{"):
@@ -92,6 +104,8 @@ class ClaudeAdapter(ProviderAdapter):
                 result_evt = obj
             elif etype == "assistant":
                 message = obj.get("message") or {}
+                if isinstance(message.get("usage"), dict):
+                    last_call_usage = message["usage"]
                 for block in message.get("content") or []:
                     if isinstance(block, dict) and block.get("type") == "text":
                         if block.get("text"):
@@ -105,7 +119,16 @@ class ClaudeAdapter(ProviderAdapter):
             usage = result_evt.get("usage") or {}
             if isinstance(usage, dict):
                 r.usage = usage
-                r.context_size = self._sum_usage(usage)
+                # The result usage is summed over the turn's model calls;
+                # the context size is the *last* call's window: its
+                # ``iterations`` entry when present, else the last assistant
+                # event's usage snapshot.
+                iterations = usage.get("iterations")
+                last = (iterations[-1] if isinstance(iterations, list) and iterations
+                        and isinstance(iterations[-1], dict) else last_call_usage)
+                r.context_size = (
+                    _context_tokens(last) if last else self._sum_usage(usage)
+                )
             if result_evt.get("is_error"):
                 r.ok = False
                 r.error = f"claude reported error: {str(r.text)[:2000]}"

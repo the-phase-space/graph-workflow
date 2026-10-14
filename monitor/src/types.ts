@@ -157,8 +157,10 @@ export interface NodeRuntime {
   lastError: string | null;
   commits: number;
   invocations: number;
+  /** Cumulative output tokens over every committed invocation. */
   tokensCommitted: number;
   tokensLive: number;
+  /** Context window of the last committed invocation's final model call. */
   contextSize: number;
   sessionId: string | null;
   receivedInputs: Set<string>;
@@ -320,9 +322,32 @@ export function nodeFill(node: Pick<NodeSpec, "type" | "provider">): string {
   }
 }
 
-/** Sum every numeric usage entry whose key mentions tokens — mirrors the
- * runtime's best-effort context-size accounting. */
-/** Generation tokens only — the "tokens" figure everywhere in the GUI.
+function num(u: Record<string, unknown>, k: string): number {
+  return typeof u[k] === "number" ? (u[k] as number) : 0;
+}
+
+/** Tokens in one model call's context window (what Claude Code's footer
+ * shows): fresh + cached input plus the reply. Handles the claude usage
+ * shape, codex's `totalTokens`, DSH's camelCase pair, and OpenAI-style
+ * `prompt_tokens`/`completion_tokens`. A call's snapshot, never a sum
+ * across calls. */
+export function contextTokens(usage: unknown): number {
+  if (!usage || typeof usage !== "object") return 0;
+  const u = usage as Record<string, unknown>;
+  if (typeof u.totalTokens === "number") return u.totalTokens;
+  if (typeof u.total_tokens === "number") return u.total_tokens;
+  const claude =
+    num(u, "input_tokens") +
+    num(u, "cache_creation_input_tokens") +
+    num(u, "cache_read_input_tokens") +
+    num(u, "output_tokens");
+  if (claude) return claude;
+  const camel = num(u, "inputTokens") + num(u, "outputTokens");
+  if (camel) return camel;
+  return num(u, "prompt_tokens") + num(u, "completion_tokens");
+}
+
+/** Generation tokens only — the cumulative "output tokens" figure.
  * Providers spell it differently: claude `output_tokens`, codex app-server
  * `outputTokens` (sometimes nested under total/last), OpenAI-style
  * `completion_tokens`. Input and cache traffic are deliberately excluded. */
