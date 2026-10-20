@@ -4,7 +4,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { visualState, type RunState } from "../runstate";
-import { fmtDuration, type GraphModel, type Selection } from "../types";
+import { fmtDuration, quickAddProviders, type GraphModel, type Selection } from "../types";
 
 // Resizable via the right-edge handle; dragging below the collapse threshold
 // snaps to the minimized rail (the » button restores the previous width).
@@ -26,6 +26,9 @@ export default function Sidebar(props: {
   path: string | null;
   canBuild: boolean;
   validation: ValidationReport | null;
+  /** Providers available on this machine (`Contract.providers`); undefined
+   * while no contract is loaded. */
+  providers?: readonly string[] | null;
   onNew: () => void;
   onOpen: () => void;
   onSave: () => void;
@@ -54,6 +57,7 @@ export default function Sidebar(props: {
   const elRef = useRef<HTMLDivElement>(null);
   const resizing = useRef(false);
   const { mode, run } = props;
+  const llmButtons = quickAddProviders(props.providers);
 
   // The add-node/edge grid is two columns only when every button label fits
   // on a single line at half the grid's width (measured against the rendered
@@ -79,7 +83,7 @@ export default function Sidebar(props: {
       chrome;
     const gap = parseFloat(getComputedStyle(el).columnGap) || 0;
     setGridTwoCol((el.clientWidth - gap) / 2 >= need + 1);
-  }, [width, minimized, props.model]);
+  }, [width, minimized, props.model, props.providers]);
 
   const startResize = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -219,19 +223,25 @@ export default function Sidebar(props: {
                 className={"btn-grid" + (gridTwoCol ? "" : " one-col")}
                 ref={gridRef}
               >
-                {/* DOM order is row-major for the two-column grid: columns
-                    read Script/Human/Edge and Claude/Codex/Grok/OpenRouter;
-                    the odd provider button is pinned to the right column. */}
-                <button onClick={() => props.onAddNode("script")}>+ Script</button>
-                <button onClick={() => props.onAddNode("claude")}>+ Claude</button>
-                <button onClick={() => props.onAddNode("human")}>+ Human</button>
-                <button onClick={() => props.onAddNode("codex")}>+ Codex</button>
-                <button onClick={props.onAddEdge}>+ Edge</button>
-                <button onClick={() => props.onAddNode("grok")}>+ Grok</button>
-                <button className="col-2" onClick={() => props.onAddNode("openrouter")}>
-                  + OpenRouter
-                </button>
+                {/* Two columns, each filled top-down (dense grid flow with
+                    explicit columns): Script/Human/Edge on the left, one
+                    button per available LLM login on the right. In one-column
+                    mode the classes are inert and DOM order stacks. */}
+                <button className="col-1" onClick={() => props.onAddNode("script")}>+ Script</button>
+                <button className="col-1" onClick={() => props.onAddNode("human")}>+ Human</button>
+                <button className="col-1" onClick={props.onAddEdge}>+ Edge</button>
+                {llmButtons.map(({ kind, label }) => (
+                  <button key={kind} className="col-2" onClick={() => props.onAddNode(kind)}>
+                    + {label}
+                  </button>
+                ))}
               </div>
+              {llmButtons.length === 0 && (
+                <div className="hint-text">
+                  No LLM CLI logins found on this machine (~/.claude, ~/.codex, ~/.grok,
+                  ~/.dsh). Script and Human nodes are still available.
+                </div>
+              )}
               <div className="btn-col">
                 <button onClick={() => props.onSelect({ kind: "graph", id: "graph" })}>
                   Graph settings…

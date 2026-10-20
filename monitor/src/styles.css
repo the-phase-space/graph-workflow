@@ -256,13 +256,20 @@ body.col-resizing .sidebar-handle {
 .btn-grid {
   display: grid;
   /* Two columns at most; Sidebar.tsx adds .one-col when a button label
-     would no longer fit on a single line at half width. */
+     would no longer fit on a single line at half width. Dense flow lets
+     .col-1 / .col-2 items each fill their own column from the top, so the
+     columns can hold different numbers of buttons. */
   grid-template-columns: 1fr 1fr;
+  grid-auto-flow: row dense;
   gap: 5px;
 }
 
 .btn-grid.one-col {
   grid-template-columns: 1fr;
+}
+
+.btn-grid:not(.one-col) .col-1 {
+  grid-column: 1;
 }
 
 .btn-grid:not(.one-col) .col-2 {

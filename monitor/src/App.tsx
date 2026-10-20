@@ -650,6 +650,7 @@ export default function App() {
         path={contract?.path ?? null}
         canBuild={!!contract}
         validation={validation}
+        providers={contract?.providers}
         onNew={() => void doNew()}
         onOpen={() => void doOpen()}
         onSave={() => void doSave()}
@@ -678,6 +679,7 @@ export default function App() {
             model={canvasModel}
             run={mode === "exec" ? run : null}
             selection={selection}
+            providers={contract?.providers}
             onSelect={setSelection}
             onAddNode={editable ? doAddNode : undefined}
             onAddEdge={editable ? doAddEdge : undefined}

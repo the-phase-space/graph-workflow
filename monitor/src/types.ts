@@ -44,6 +44,33 @@ export function providerOptions(
   return out;
 }
 
+/** Display names for provider buttons and menu entries. */
+export const PROVIDER_LABELS: Record<string, string> = {
+  claude: "Claude",
+  claudeb: "Claude B",
+  codex: "Codex",
+  codexb: "Codex B",
+  grok: "Grok",
+  openrouter: "OpenRouter",
+};
+
+/** Providers that get a one-click "+ <Provider>" affordance (sidebar buttons
+ * and the canvas "New node" submenu): each CLI's default login. Second logins
+ * are reached through the node dialog's Provider menu. */
+const QUICK_ADD_PROVIDERS: Provider[] = ["claude", "codex", "grok", "openrouter"];
+
+/** Quick-add entries for the providers available on this machine, in display
+ * order. With no contract loaded every quick-add provider is offered; with
+ * one, only logins whose config dir exists — so a machine without `grok`
+ * never shows a "+ Grok" button. */
+export function quickAddProviders(
+  available: readonly string[] | null | undefined,
+): Array<{ kind: string; label: string }> {
+  return QUICK_ADD_PROVIDERS
+    .filter((p) => !available || available.includes(p))
+    .map((p) => ({ kind: p, label: PROVIDER_LABELS[p] ?? p }));
+}
+
 export interface NodeSpec {
   id: string;
   rank: number;

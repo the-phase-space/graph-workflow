@@ -32,6 +32,7 @@ import {
   modelAlias,
   nodeFill,
   nodeLabel,
+  quickAddProviders,
   type GraphModel,
   type NodeSpec,
   type Selection,
@@ -138,15 +139,17 @@ interface View {
 }
 
 // Node kinds offered by the right-click "New node" submenu; mirrors the
-// Compose section of the sidebar.
-const NODE_KINDS: Array<{ kind: string; label: string }> = [
-  { kind: "script", label: "Script" },
-  { kind: "human", label: "Human" },
-  { kind: "claude", label: "Claude" },
-  { kind: "codex", label: "Codex" },
-  { kind: "grok", label: "Grok" },
-  { kind: "openrouter", label: "OpenRouter" },
-];
+// Compose section of the sidebar, including its filter to the LLM logins
+// present on this machine.
+function nodeKinds(
+  providers: readonly string[] | null | undefined,
+): Array<{ kind: string; label: string }> {
+  return [
+    { kind: "script", label: "Script" },
+    { kind: "human", label: "Human" },
+    ...quickAddProviders(providers),
+  ];
+}
 
 export default function Canvas(props: {
   /** Identifies the opened definition or run; stays stable through edits. */
@@ -154,6 +157,9 @@ export default function Canvas(props: {
   model: GraphModel;
   run: RunState | null;
   selection: Selection | null;
+  /** Providers available on this machine (`Contract.providers`); undefined
+   * while no contract is loaded. */
+  providers?: readonly string[] | null;
   onSelect: (s: Selection | null) => void;
   onAddNode?: (kind: string) => void;
   onAddEdge?: () => void;
@@ -736,7 +742,7 @@ export default function Canvas(props: {
             <span>New node</span>
             <span className="ctx-caret">▸</span>
             <div className="ctx-sub">
-              {NODE_KINDS.map(({ kind, label }) => (
+              {nodeKinds(props.providers).map(({ kind, label }) => (
                 <button
                   key={kind}
                   className="ctx-item"

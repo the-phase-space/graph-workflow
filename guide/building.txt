@@ -21,15 +21,26 @@ Install the Monitor's dependencies and compile its frontend:
     npm ci
     npm run build -- --outDir "$env:CARGO_TARGET_DIR\monitor-dist"
 
-Point Tauri to that frontend, then build the Monitor executable. npm ci
-installs dependencies; --no-bundle belongs to the Tauri build command and
-skips creating installer packages. The temporary config leaves the tracked
-Tauri configuration unchanged.
+Point Tauri to that frontend, then build the Monitor executable. The
+frontendDist value carries the \\?\ prefix on purpose: Tauri reads a plain
+"C:\..." value as a URL (scheme "c"), embeds nothing, and produces an exe
+that loads the temp folder at run time and breaks once it is gone. The
+prefixed form names the same folder but cannot parse as a URL, so the
+assets are embedded. The cargo clean line forces the app crate to
+recompile; embedded assets refresh only when it does, so without that line
+a frontend-only change never reaches the exe. --no-bundle belongs to the
+Tauri build command and skips creating installer packages. The temporary
+config leaves the tracked Tauri configuration unchanged.
 
     $gwConfigPath = "$env:CARGO_TARGET_DIR\monitor-config.json"
-    $gwConfig = @{ build = @{ frontendDist = "$env:CARGO_TARGET_DIR\monitor-dist" } } | ConvertTo-Json
+    $gwConfig = @{ build = @{ frontendDist = "\\?\$env:CARGO_TARGET_DIR\monitor-dist" } } | ConvertTo-Json
     [System.IO.File]::WriteAllText($gwConfigPath, $gwConfig)
+    cargo clean --release -p graph-workflow-monitor --manifest-path src-tauri\Cargo.toml
     npm run tauri -- build --no-bundle --config "$gwConfigPath"
+
+A correct build is roughly 150 KB larger than one that embedded nothing;
+if the window shows a directory listing instead of the app, the assets
+were not embedded.
 
 After the build succeeds, put the executable in its expected location. Copy
 rather than move: Move-Item -Force does not replace an existing file on
