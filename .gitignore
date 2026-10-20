@@ -1,4 +1,5 @@
 AGENTS.md
+get-project-context.ps1
 .claude/
 __pycache__/
 *.py[cod]
