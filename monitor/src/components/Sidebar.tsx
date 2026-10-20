@@ -192,7 +192,6 @@ export default function Sidebar(props: {
         onMouseDown={startResize}
       />
       <div className="sidebar-head">
-        <span className={"mode-badge " + mode}>{mode === "build" ? "BUILD" : "EXECUTION"}</span>
         <button className="icon-btn" title="Minimize sidebar" onClick={() => setMinimized(true)}>
           «
         </button>

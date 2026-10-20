@@ -209,25 +209,7 @@ body.col-resizing .sidebar-handle {
 .sidebar-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-}
-
-.mode-badge {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  padding: 3px 8px;
-  border-radius: 5px;
-}
-
-.mode-badge.build {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent);
-}
-
-.mode-badge.exec {
-  background: color-mix(in srgb, #f2c521 22%, transparent);
-  color: #b58900;
+  justify-content: flex-end;
 }
 
 .section {
