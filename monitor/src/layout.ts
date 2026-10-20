@@ -1,8 +1,10 @@
 // Automatic graph layout: layered, bottom-to-top (the Generator at the
 // bottom, primary flow upward). Cyclic graphs keep the dominant orientation
-// with return edges routed against it around the side. A node the user has
-// moved by hand (Shift+drag, build mode) carries a stored position that
-// overrides its automatic slot; everything else stays automatic.
+// with return edges routed against it around the side. A wide layer (a big
+// parallel fan-out) is folded into staggered sub-rows, brick-wall style, so
+// it grows into a block instead of a line. A node the user has moved by
+// hand (Shift+drag, build mode) carries a stored position that overrides
+// its automatic slot; everything else stays automatic.
 
 import { GEN, type EdgeSpec, type GraphModel } from "./types";
 
@@ -17,6 +19,21 @@ export const NODE_H = 66;
 export const GEN_W = 96;
 export const GEN_H = 38;
 const GAP_Y = 118;
+
+// Wide-layer folding. A layer with at least STAGGER_MIN nodes is dealt into
+// sub-rows (node i goes to sub-row i % k, column floor(i / k)), with odd
+// sub-rows shifted half a pitch so each node sits under the gap between its
+// two neighbours above — which is also where its (initially vertical) edge
+// threads through. Sub-row count grows with the layer, up to MAX_SUB_ROWS.
+const SUB_GAP_Y = 16;
+const STAGGER_MIN = 9;
+const STAGGER_PER_ROW = 24;
+const MAX_SUB_ROWS = 6;
+
+function subRowCount(n: number): number {
+  if (n < STAGGER_MIN) return 1;
+  return Math.max(2, Math.min(MAX_SUB_ROWS, Math.ceil(n / STAGGER_PER_ROW)));
+}
 
 /** Node display modes: expanded faces carry text; compact faces are textless
  * vertical bars packed tightly, for graphs with very wide layers. */
@@ -136,20 +153,35 @@ export function computeLayout(model: GraphModel, mode: NodeMode = "expanded"): L
     }
   }
 
+  // Place layers top-down (the top layer at y = 0) so each layer's height,
+  // which depends on how many sub-rows it folds into, pushes the layers
+  // beneath it further down. Within a layer, consecutive nodes zigzag
+  // between sub-rows, so the barycenter ordering stays spatially contiguous.
   const rects = new Map<string, Rect>();
-  for (let li = 0; li <= maxLayer; li++) {
+  const pitch = NODE_W + GAP_X;
+  let yCursor = 0;
+  for (let li = maxLayer; li >= 0; li--) {
     const row = layers[li];
-    const widths = row.map((id) => (id === GEN ? GEN_W : NODE_W));
-    const total = widths.reduce((a, b) => a + b, 0) + GAP_X * Math.max(0, row.length - 1);
-    let x = -total / 2;
-    const y = (maxLayer - li) * (NODE_H + GAP_Y);
-    for (let i = 0; i < row.length; i++) {
-      const id = row[i];
-      const w = widths[i];
-      const h = id === GEN ? GEN_H : NODE_H;
-      rects.set(id, { x, y: y + (NODE_H - h) / 2, w, h });
-      x += w + GAP_X;
+    const k = subRowCount(row.length);
+    const slots = row.map((id, i) => ({
+      id,
+      sub: i % k,
+      x: Math.floor(i / k) * pitch + ((i % k) % 2) * (pitch / 2),
+      w: id === GEN ? GEN_W : NODE_W,
+    }));
+    let minX = Infinity,
+      maxX = -Infinity;
+    for (const s of slots) {
+      minX = Math.min(minX, s.x);
+      maxX = Math.max(maxX, s.x + s.w);
     }
+    const shift = -(minX + maxX) / 2;
+    for (const s of slots) {
+      const h = s.id === GEN ? GEN_H : NODE_H;
+      const y = yCursor + s.sub * (NODE_H + SUB_GAP_Y);
+      rects.set(s.id, { x: s.x + shift, y: y + (NODE_H - h) / 2, w: s.w, h });
+    }
+    yCursor += k * NODE_H + (k - 1) * SUB_GAP_Y + GAP_Y;
   }
 
   // Manual overrides win over the automatic slots (and count toward the
