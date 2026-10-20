@@ -26,21 +26,24 @@ export type Provider = "claude" | "claudeb" | "codex" | "codexb" | "grok" | "ope
  * runs OpenRouter API models through the local DSH CLI (`dsh -p`).
  *
  * Menus do not list this directly: they list `Contract.providers`, the subset
- * whose config dir exists on this machine (via `providerOptions`). This full
- * list is only the fallback while no contract is loaded. */
+ * whose CLI and config dir exist on this machine (via `providerOptions`). This
+ * full list is only the fallback while no contract is loaded. */
 export const PROVIDERS: Provider[] = ["claude", "claudeb", "codex", "codexb", "grok", "openrouter"];
 
-/** Provider names a menu should offer: the providers available on this
+/** Provider entries a menu should offer: the providers available on this
  * machine (the backend's list; all known providers when none is loaded) plus
  * any `current` values that are not among them, so a node or semaphore bound
- * to a login that has since been deleted stays visible instead of silently
- * displaying as something else. */
+ * to a login this machine lacks (typically in someone else's definition)
+ * stays visible, labeled as absent, instead of silently displaying as
+ * something else. */
 export function providerOptions(
   available: readonly string[] | null | undefined,
   ...current: (string | null | undefined)[]
-): string[] {
-  const out = [...(available ?? PROVIDERS)];
-  for (const c of current) if (c && !out.includes(c)) out.push(c);
+): Array<{ value: string; label: string }> {
+  const out = (available ?? PROVIDERS).map((p) => ({ value: p, label: p }));
+  for (const c of current)
+    if (c && !out.some((o) => o.value === c))
+      out.push({ value: c, label: `${c} (not on this machine)` });
   return out;
 }
 
@@ -61,8 +64,8 @@ const QUICK_ADD_PROVIDERS: Provider[] = ["claude", "codex", "grok", "openrouter"
 
 /** Quick-add entries for the providers available on this machine, in display
  * order. With no contract loaded every quick-add provider is offered; with
- * one, only logins whose config dir exists — so a machine without `grok`
- * never shows a "+ Grok" button. */
+ * one, only logins whose CLI and config dir exist — so a machine without
+ * `grok` (or with only a leftover ~/.grok) never shows a "+ Grok" button. */
 export function quickAddProviders(
   available: readonly string[] | null | undefined,
 ): Array<{ kind: string; label: string }> {
@@ -146,7 +149,7 @@ export interface Contract {
   graph: GraphModel;
   errors: string[];
   warnings: string[];
-  /** Providers whose login (config dir) exists on this machine, sorted;
+  /** Providers whose CLI and login (config dir) exist on this machine, sorted;
    * computed by the backend on every load/save/template. */
   providers: string[];
 }

@@ -326,8 +326,8 @@ export function GraphDialog(props: {
             ))}
           </div>
           <div className="field-label">Per-provider (subdivide the LLM semaphore)</div>
-          {semProviders.map((p) => (
-            <Field label={p} key={p}>
+          {semProviders.map(({ value: p, label }) => (
+            <Field label={label} key={p}>
               <input
                 className="mono"
                 value={sems.providers[p] == null ? "" : String(sems.providers[p])}

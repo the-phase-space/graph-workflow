@@ -238,8 +238,9 @@ export default function Sidebar(props: {
               </div>
               {llmButtons.length === 0 && (
                 <div className="hint-text">
-                  No LLM CLI logins found on this machine (~/.claude, ~/.codex, ~/.grok,
-                  ~/.dsh). Script and Human nodes are still available.
+                  No LLM CLI logins found on this machine (each needs its CLI on PATH
+                  and its ~/.claude, ~/.codex, ~/.grok, or ~/.dsh config dir). Script
+                  and Human nodes are still available.
                 </div>
               )}
               <div className="btn-col">

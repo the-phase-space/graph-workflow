@@ -40,9 +40,10 @@ def known_providers() -> list[str]:
 
 
 def available_providers() -> list[str]:
-    """Known providers whose login (config dir) exists on this machine — what
-    the Monitor offers in its provider menus. Delete ``~/.codexb`` and
-    ``codexb`` drops out; the runtime itself still accepts any known name."""
+    """Known providers whose CLI is on PATH and whose login (config dir)
+    exists on this machine — what the Monitor offers in its provider menus.
+    Delete ``~/.codexb`` (or uninstall ``codex``) and ``codexb`` drops out;
+    the runtime itself still accepts any known name."""
     return [name for name in sorted(_REGISTRY) if _REGISTRY[name].available()]
 
 

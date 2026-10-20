@@ -63,7 +63,8 @@ class ProviderAdapter:
     config_dir: str | None = None
     #: Home-relative dir the CLI's *default* login lives in. Never passed to
     #: the CLI (the variable stays unset); only consulted by ``available()``
-    #: so the Monitor can hide logins that are absent from this machine.
+    #: (with the executable) so the Monitor can hide logins that are absent
+    #: from this machine.
     default_config_dir: str | None = None
 
     _resolved_exe: str | None = None
@@ -93,8 +94,12 @@ class ProviderAdapter:
         return os.path.join(os.path.expanduser("~"), rel)
 
     def available(self) -> bool:
-        """True when this login's config dir exists on this machine (an
-        adapter that declares no dir is always available)."""
+        """True when this login is usable on this machine: the CLI resolves
+        on PATH and its config dir exists (an adapter that declares no dir
+        needs only the CLI). Checking both keeps a config dir left behind by
+        an uninstall from counting as a login."""
+        if not shutil.which(self.executable):
+            return False
         path = self.login_dir()
         return path is None or os.path.isdir(path)
 

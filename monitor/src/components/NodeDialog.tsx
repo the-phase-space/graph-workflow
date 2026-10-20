@@ -164,7 +164,7 @@ export default function NodeDialog(props: {
                     value={provider}
                     options={providerOptions(props.providers, provider)}
                     readOnly={ro}
-                    hint="Logins whose config dir exists on this machine"
+                    hint="Logins whose CLI and config dir exist on this machine"
                     onChange={
                       editable
                         ? (v) => {
