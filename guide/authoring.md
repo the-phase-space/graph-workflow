@@ -211,7 +211,7 @@ OpenRouter requires `dsh.exe` on Windows (`dsh` elsewhere). Its adapter clears i
 | `openrouter` | Muse Spark 1.3 | `meta/muse-spark-1.3-contributor` (alias `muse-spark-1.3`) | `low`, `medium`, `high`, `xhigh`, `max` |
 | `openrouter` | Muse Wonder | `meta/muse-wonder` (alias `muse-wonder`) | `low`, `medium`, `high`, `xhigh`, `max` |
 
-Muse Spark 1.3 and Muse Wonder are the supplied OpenRouter models. The adapter expands the short aliases to the listed ids; other explicit ids pass through to DSH. Use `provider="openrouter"`, not the delegate wrapper's `dsh` provider name:
+Muse Spark 1.3 and Muse Wonder are the supplied OpenRouter models. The adapter expands the short aliases to the listed ids; other explicit ids pass through to DSH. Use `provider="openrouter"`:
 
 ```python
 A = LLMNode("A", rank=0, provider="openrouter", model="muse-spark-1.3",

@@ -8,7 +8,7 @@ name = "graph-workflow"
 # git tags are the sole source of truth for version history.
 dynamic = ["version"]
 description = "Runtime library for composing and executing directed graphs of script, LLM, and human nodes."
-readme = "README.md"
+readme = "README.txt"
 requires-python = ">=3.11"
 
 [tool.setuptools]
