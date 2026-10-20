@@ -61,6 +61,10 @@ class ProviderAdapter:
     #: Home-relative config dir to point ``config_var`` at; None = the CLI's
     #: default dir, reached by leaving the variable unset.
     config_dir: str | None = None
+    #: Home-relative dir the CLI's *default* login lives in. Never passed to
+    #: the CLI (the variable stays unset); only consulted by ``available()``
+    #: so the Monitor can hide logins that are absent from this machine.
+    default_config_dir: str | None = None
 
     _resolved_exe: str | None = None
 
@@ -79,6 +83,20 @@ class ProviderAdapter:
         if not self.config_dir:
             return None
         return os.path.join(os.path.expanduser("~"), self.config_dir)
+
+    def login_dir(self) -> str | None:
+        """Absolute dir this adapter's login lives in: the second config dir
+        for a ``b`` adapter, else the CLI's default dir; None if unknown."""
+        rel = self.config_dir or self.default_config_dir
+        if not rel:
+            return None
+        return os.path.join(os.path.expanduser("~"), rel)
+
+    def available(self) -> bool:
+        """True when this login's config dir exists on this machine (an
+        adapter that declares no dir is always available)."""
+        path = self.login_dir()
+        return path is None or os.path.isdir(path)
 
     def build_env(self) -> dict[str, str]:
         strip = {s.upper() for s in

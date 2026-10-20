@@ -23,8 +23,26 @@ export type Provider = "claude" | "claudeb" | "codex" | "codexb" | "grok" | "ope
 /** Every provider the runtime knows, in dropdown order. The `b` variants run
  * the same CLI on its second config dir (~/.claudeb, ~/.codexb) — a second
  * login, i.e. a second rate limit — and take that CLI's models. `openrouter`
- * runs OpenRouter API models through the local DSH CLI (`dsh -p`). */
+ * runs OpenRouter API models through the local DSH CLI (`dsh -p`).
+ *
+ * Menus do not list this directly: they list `Contract.providers`, the subset
+ * whose config dir exists on this machine (via `providerOptions`). This full
+ * list is only the fallback while no contract is loaded. */
 export const PROVIDERS: Provider[] = ["claude", "claudeb", "codex", "codexb", "grok", "openrouter"];
+
+/** Provider names a menu should offer: the providers available on this
+ * machine (the backend's list; all known providers when none is loaded) plus
+ * any `current` values that are not among them, so a node or semaphore bound
+ * to a login that has since been deleted stays visible instead of silently
+ * displaying as something else. */
+export function providerOptions(
+  available: readonly string[] | null | undefined,
+  ...current: (string | null | undefined)[]
+): string[] {
+  const out = [...(available ?? PROVIDERS)];
+  for (const c of current) if (c && !out.includes(c)) out.push(c);
+  return out;
+}
 
 export interface NodeSpec {
   id: string;
@@ -101,6 +119,8 @@ export interface Contract {
   graph: GraphModel;
   errors: string[];
   warnings: string[];
+  /** Providers whose login (config dir) exists on this machine, sorted;
+   * computed by the backend on every load/save/template. */
   providers: string[];
 }
 

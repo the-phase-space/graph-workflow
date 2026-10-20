@@ -6,8 +6,8 @@ import { normalizeEdgeGates } from "../graphops";
 import {
   DEFAULT_LABEL_TEMPLATE,
   GEN,
-  PROVIDERS,
   nodeLabel,
+  providerOptions,
   type EdgeSpec,
   type GateSpec,
   type GraphModel,
@@ -214,6 +214,9 @@ export function GraphDialog(props: {
   model: GraphModel;
   helpers: string;
   editable: boolean;
+  /** Providers available on this machine (`Contract.providers`); undefined
+   * while no contract is loaded. */
+  providers?: readonly string[] | null;
   onChange: (m: GraphModel) => void;
   onHelpers: (h: string) => void;
   onClose: () => void;
@@ -223,6 +226,9 @@ export function GraphDialog(props: {
   const sems = model.semaphores;
   const setSem = (k: "script" | "llm" | "human", v: string) =>
     set({ semaphores: { ...sems, [k]: Math.max(1, parseInt(v, 10) || 1) } });
+  // Available logins, plus any provider that already carries a semaphore so
+  // a bound-but-deleted login stays visible (and clearable).
+  const semProviders = providerOptions(props.providers, ...Object.keys(sems.providers ?? {}));
 
   return (
     <div className="dialog">
@@ -320,7 +326,7 @@ export function GraphDialog(props: {
             ))}
           </div>
           <div className="field-label">Per-provider (subdivide the LLM semaphore)</div>
-          {PROVIDERS.map((p) => (
+          {semProviders.map((p) => (
             <Field label={p} key={p}>
               <input
                 className="mono"

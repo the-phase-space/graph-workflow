@@ -7,13 +7,13 @@ import { useEffect, useRef, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { nodeContext, type RunState } from "../runstate";
 import {
-  PROVIDERS,
   PROVIDER_MODELS,
   coerceEffort,
   effortsFor,
   fmtTokens,
   nodeFill,
   nodeLabel,
+  providerOptions,
   type ActivityItem,
   type NodeSpec,
 } from "../types";
@@ -31,11 +31,15 @@ export default function NodeDialog(props: {
   node: NodeSpec;
   run: RunState | null;
   editable: boolean;
+  /** Providers available on this machine (`Contract.providers`); undefined
+   * while no contract is loaded. */
+  providers?: readonly string[] | null;
   onChange: (n: NodeSpec) => void;
   onDelete: () => void;
   onClose: () => void;
 }) {
   const { node, run, editable } = props;
+  const provider = node.provider ?? "claude";
   const [showTools, setShowTools] = useState(false);
   const [customModel, setCustomModel] = useState(false);
   useEffect(() => setCustomModel(false), [node.id]);
@@ -157,9 +161,10 @@ export default function NodeDialog(props: {
                 <FieldRow cols={3}>
                   <SelectField
                     label="Provider"
-                    value={node.provider ?? "claude"}
-                    options={PROVIDERS}
+                    value={provider}
+                    options={providerOptions(props.providers, provider)}
                     readOnly={ro}
+                    hint="Logins whose config dir exists on this machine"
                     onChange={
                       editable
                         ? (v) => {

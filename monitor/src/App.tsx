@@ -589,6 +589,7 @@ export default function App() {
         node={selectedNode}
         run={mode === "exec" ? run : null}
         editable={editable}
+        providers={contract?.providers}
         onChange={(n) =>
           mutate((c) => {
             if (n.id !== selectedNode.id) setSelection({ kind: "node", id: n.id });
@@ -622,6 +623,7 @@ export default function App() {
         model={model}
         helpers={helpers}
         editable={editable}
+        providers={contract?.providers}
         onChange={(m) => mutate((c) => ({ ...c, graph: m }), "insp:graph")}
         onHelpers={(h) => mutate((c) => ({ ...c, helpers: h }), "insp:helpers")}
         onClose={() => setSelection(null)}

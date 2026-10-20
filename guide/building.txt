@@ -31,10 +31,13 @@ Tauri configuration unchanged.
     [System.IO.File]::WriteAllText($gwConfigPath, $gwConfig)
     npm run tauri -- build --no-bundle --config "$gwConfigPath"
 
-After the build succeeds, put the executable in its expected location:
+After the build succeeds, put the executable in its expected location. Copy
+rather than move: Move-Item -Force does not replace an existing file on
+another drive, so a rebuild would leave the old executable in place.
 
     New-Item -ItemType Directory -Force -Path .\bin | Out-Null
-    Move-Item -LiteralPath "$env:CARGO_TARGET_DIR\release\graph-workflow-monitor.exe" -Destination .\bin\graph-workflow-monitor.exe -Force
+    Copy-Item -LiteralPath "$env:CARGO_TARGET_DIR\release\graph-workflow-monitor.exe" -Destination .\bin\graph-workflow-monitor.exe -Force
+    Remove-Item -LiteralPath "$env:CARGO_TARGET_DIR\release\graph-workflow-monitor.exe"
 
 Build the human-input window using the Tauri CLI installed above. Its
 frontend is already in human-shell\ui and needs no separate build:
@@ -45,7 +48,8 @@ frontend is already in human-shell\ui and needs no separate build:
 After that build succeeds:
 
     New-Item -ItemType Directory -Force -Path .\bin | Out-Null
-    Move-Item -LiteralPath "$env:CARGO_TARGET_DIR\release\human-shell.exe" -Destination .\bin\human-shell.exe -Force
+    Copy-Item -LiteralPath "$env:CARGO_TARGET_DIR\release\human-shell.exe" -Destination .\bin\human-shell.exe -Force
+    Remove-Item -LiteralPath "$env:CARGO_TARGET_DIR\release\human-shell.exe"
     Set-Location -LiteralPath $gwRoot
 
 Open monitor\bin\graph-workflow-monitor.exe to create or load a graph.

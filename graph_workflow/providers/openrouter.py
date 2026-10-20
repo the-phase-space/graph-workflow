@@ -31,6 +31,7 @@ class OpenRouterAdapter(ProviderAdapter):
     name = "openrouter"
     executable = "dsh.exe" if os.name == "nt" else "dsh"
     config_var = "DSH_HOME"
+    default_config_dir = ".dsh"
     extra_env_strip = ("DSH_HOME", "CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION")
 
     def plan_new(self, node, session_id, cwd, prompt, prompt_file):

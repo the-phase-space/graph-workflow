@@ -15,6 +15,7 @@ class GrokAdapter(ProviderAdapter):
     name = "grok"
     executable = "grok"
     config_var = "GROK_HOME"
+    default_config_dir = ".grok"
     needs_prompt_file = True
     # Headless grok (--prompt-file single-turn) exposes no stdin steering
     # channel; Pause falls back to interrupt + halt-via-resume.

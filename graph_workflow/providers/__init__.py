@@ -39,6 +39,13 @@ def known_providers() -> list[str]:
     return sorted(_REGISTRY)
 
 
+def available_providers() -> list[str]:
+    """Known providers whose login (config dir) exists on this machine — what
+    the Monitor offers in its provider menus. Delete ``~/.codexb`` and
+    ``codexb`` drops out; the runtime itself still accepts any known name."""
+    return [name for name in sorted(_REGISTRY) if _REGISTRY[name].available()]
+
+
 __all__ = [
     "COMMON_ENV_STRIP",
     "CONFIG_DIR_VARS",
@@ -46,6 +53,7 @@ __all__ = [
     "InvocationResult",
     "LiveInvocation",
     "ProviderAdapter",
+    "available_providers",
     "get_adapter",
     "invoke",
     "kill_tree",

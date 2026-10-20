@@ -46,6 +46,7 @@ class ClaudeAdapter(ProviderAdapter):
     name = "claude"
     executable = "claude"
     config_var = "CLAUDE_CONFIG_DIR"
+    default_config_dir = ".claude"
     # Stripped just in case headless behavior under a parent Claude Code
     # session ever reverts (see Node Execution Contract in the spec).
     extra_env_strip = ("CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION")

@@ -299,6 +299,7 @@ class CodexAdapter(ProviderAdapter):
     name = "codex"
     executable = "codex"
     config_var = "CODEX_HOME"
+    default_config_dir = ".codex"
     #: The runtime cannot choose the session id; it is the app-server thread
     #: id (or, on the exec fallback, the ``thread.started`` event's id).
     provider_assigns_session = True

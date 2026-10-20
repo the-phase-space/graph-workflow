@@ -54,7 +54,7 @@ from .model import (
 )
 from .errors import GraphValidationError
 from .editing import delete_element
-from .providers import known_providers
+from .providers import available_providers
 from .validation import validate
 
 CONTRACT_VERSION = 1
@@ -512,7 +512,7 @@ def load_contract(path) -> dict:
         "graph": graph_to_contract(graph, namespace, callable_sources),
         "errors": errors,
         "warnings": list(warnings),
-        "providers": known_providers(),
+        "providers": available_providers(),
     }
     for node in contract["graph"]["nodes"]:
         for field, flag in (("fn", "code_opaque"), ("prompt", "prompt_opaque"),
@@ -837,7 +837,7 @@ def template(name: str = "untitled") -> dict:
         },
         "errors": [],
         "warnings": [],
-        "providers": known_providers(),
+        "providers": available_providers(),
     }
 
 
