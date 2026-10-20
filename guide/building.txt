@@ -1,0 +1,56 @@
+Building Graph Workflow on Windows
+
+Install Python 3.11 or later (available as "python"), Node.js LTS with npm,
+Rust with the MSVC toolchain, Microsoft C++ Build Tools with "Desktop
+development with C++", and the WebView2 runtime. Tauri's setup guide covers
+the build prerequisites: https://v2.tauri.app/start/prerequisites/
+
+Open PowerShell in the repository root. Run the commands below in order,
+in the same window. Stop if a command fails. Close any running Monitor or
+human-input windows before replacing their executables.
+
+Build outputs go into local temporary storage, outside Dropbox:
+
+    $gwRoot = (Get-Location).Path
+    $env:CARGO_TARGET_DIR = "$env:LOCALAPPDATA\Temp\Graph-Workflow-build"
+    New-Item -ItemType Directory -Force -Path $env:CARGO_TARGET_DIR | Out-Null
+
+Install the Monitor's dependencies and compile its frontend:
+
+    Set-Location -LiteralPath "$gwRoot\monitor"
+    npm ci
+    npm run build -- --outDir "$env:CARGO_TARGET_DIR\monitor-dist"
+
+Point Tauri to that frontend, then build the Monitor executable. npm ci
+installs dependencies; --no-bundle belongs to the Tauri build command and
+skips creating installer packages. The temporary config leaves the tracked
+Tauri configuration unchanged.
+
+    $gwConfigPath = "$env:CARGO_TARGET_DIR\monitor-config.json"
+    $gwConfig = @{ build = @{ frontendDist = "$env:CARGO_TARGET_DIR\monitor-dist" } } | ConvertTo-Json
+    [System.IO.File]::WriteAllText($gwConfigPath, $gwConfig)
+    npm run tauri -- build --no-bundle --config "$gwConfigPath"
+
+After the build succeeds, put the executable in its expected location:
+
+    New-Item -ItemType Directory -Force -Path .\bin | Out-Null
+    Move-Item -LiteralPath "$env:CARGO_TARGET_DIR\release\graph-workflow-monitor.exe" -Destination .\bin\graph-workflow-monitor.exe -Force
+
+Build the human-input window using the Tauri CLI installed above. Its
+frontend is already in human-shell\ui and needs no separate build:
+
+    Set-Location -LiteralPath "$gwRoot\human-shell"
+    & ..\monitor\node_modules\.bin\tauri.cmd build --no-bundle
+
+After that build succeeds:
+
+    New-Item -ItemType Directory -Force -Path .\bin | Out-Null
+    Move-Item -LiteralPath "$env:CARGO_TARGET_DIR\release\human-shell.exe" -Destination .\bin\human-shell.exe -Force
+    Set-Location -LiteralPath $gwRoot
+
+Open monitor\bin\graph-workflow-monitor.exe to create or load a graph.
+Keep both executables in these locations within the checkout. The Monitor
+uses the Python runtime directly from the repository; human-input windows
+open when a running graph needs your response.
+
+Tauri build options: https://v2.tauri.app/reference/cli/#build

@@ -7,7 +7,8 @@ can branch, run steps in parallel, and loop through revisions.
 The Windows Monitor lets you create and edit graphs, start runs, inspect
 results, and pause, resume, or stop execution.
 
-To get started, open monitor\bin\graph-workflow-monitor.exe (when built).
+Executables are built locally and are not included in a clone. Follow
+guide/building.txt first, then open monitor\bin\graph-workflow-monitor.exe.
 Create a graph or open an existing Python definition, then run it. You can
 also run a definition directly: python mygraph.py
 
