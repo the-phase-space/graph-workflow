@@ -4,10 +4,10 @@ human-in-the-loop nodes.
 
 It allows arbitrary code execution, unlike the workflow tool in Claude Code.
 
-Graph topology can branch, loop, and form any node-edge configuration you like. 
+The Graph's topology can branch, loop, form any node-edge configuration you like. 
 This topology remains static once execution begins. The rules governing how 
 information propagates through nodes and edges are left fully within the control
-of the user.
+of the user. Each gate is simply a boolean expression.
 
 Build the two Windows apps before using them; executables are not included
 in the repository. You can open this repo in Claude or Codex and ask:
@@ -39,16 +39,17 @@ paths, creating the bin folders if needed:
     monitor\bin\graph-workflow-monitor.exe
     human-shell\bin\human-shell.exe
 
-Read guide/authoring.md before writing a graph definition. This tool was
-created with a user-trusting, non-idiot-proof ethos. It's possible to build graphs 
-that loop perpetually, that fan out more than your subscription(s) can handle, etc. 
+Read (have your LLM assistant read) guide/authoring.md before writing a graph 
+definition. This tool was created with a user-trusting, non-idiot-proof ethos. 
+It's possible to build graphs that loop perpetually, that fan out more than 
+your subscription(s) can handle, etc. 
 But that also means that your only constraints are:
 1) your imagination 
 2) your budget
 
 To watch a graph run in real time, load the resulting .py file in the Monitor
 and run it. AI steps require their provider's command-line tool to be installed
-and signed in. Human steps open an input window when they need you. Keep run
+and signed in. Human steps open an input shell when they need you. Keep run
 folders outside cloud-synced storage if you can.
 
 Currently, the runtime supports up to 2 accounts each for Claude and OpenAI.
